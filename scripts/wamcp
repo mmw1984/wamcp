@@ -265,7 +265,12 @@ ensure_port_free_or_self() {
   fi
 
   if [[ "${force}" == "true" ]]; then
-    mapfile -t pids < <(port_listen_pids "${port}")
+    # macOS ships Bash 3.2 — no mapfile (Bash 4+); read lines into array instead.
+    local pids=()
+    local line
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] && pids+=("${line}")
+    done < <(port_listen_pids "${port}")
     if [[ "${#pids[@]}" -eq 0 ]]; then
       print_error "Port ${port} is in use but could not identify PID(s)."
       exit 1
