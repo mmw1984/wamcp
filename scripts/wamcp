@@ -1,0 +1,570 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Allow global install: set WAMCP_ROOT to the repo checkout root.
+# If unset, default to parent of this script (repo layout).
+ROOT_DIR="${WAMCP_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+STATE_DIR="${WAMCP_HOME:-${ROOT_DIR}/.wamcp}"
+RUN_DIR="${STATE_DIR}/run"
+LOG_DIR="${STATE_DIR}/logs"
+BIN_DIR="${STATE_DIR}/bin"
+ENV_FILE="${STATE_DIR}/env"
+
+BRIDGE_PID_FILE="${RUN_DIR}/bridge.pid"
+MCP_PID_FILE="${RUN_DIR}/mcp.pid"
+BRIDGE_LOG_FILE="${LOG_DIR}/bridge.log"
+MCP_LOG_FILE="${LOG_DIR}/mcp.log"
+BRIDGE_BIN="${BIN_DIR}/whatsapp-bridge"
+
+BRIDGE_PORT="${BRIDGE_PORT:-8080}"
+MCP_PORT="${MCP_PORT:-8081}"
+
+OS_TYPE=""
+
+print_info() {
+  printf "[wamcp] %s\n" "$*"
+}
+
+print_warn() {
+  printf "[wamcp] WARN: %s\n" "$*" >&2
+}
+
+print_error() {
+  printf "[wamcp] ERROR: %s\n" "$*" >&2
+}
+
+usage() {
+  cat <<'EOF'
+wamcp - WhatsApp MCP non-docker helper
+
+Usage:
+  wamcp install
+  wamcp up [--sse]
+  wamcp login phone <number>
+  wamcp login qr
+  wamcp status
+  wamcp logs [bridge|mcp]
+  wamcp stop
+  wamcp doctor
+  wamcp mcp-config
+  wamcp self uninstall
+
+Notes:
+  - Default mode is bridge + mcp-sse.
+  - For Cursor/Claude stdio MCP, use "wamcp mcp-config".
+EOF
+}
+
+detect_os() {
+  local uname_out
+  uname_out="$(uname -s)"
+  case "${uname_out}" in
+    Darwin) OS_TYPE="macos" ;;
+    Linux) OS_TYPE="linux" ;;
+    *)
+      print_error "Unsupported OS: ${uname_out}"
+      exit 1
+      ;;
+  esac
+}
+
+ensure_dirs() {
+  mkdir -p "${STATE_DIR}" "${RUN_DIR}" "${LOG_DIR}" "${BIN_DIR}" "${ROOT_DIR}/store" "${ROOT_DIR}/media"
+}
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    print_error "Missing command: ${cmd}"
+    return 1
+  fi
+}
+
+generate_api_key() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+  else
+    print_error "Need openssl or python3 to generate API key"
+    exit 1
+  fi
+}
+
+ensure_env_file() {
+  if [[ -f "${ENV_FILE}" ]]; then
+    return
+  fi
+
+  local key
+  key="$(generate_api_key)"
+  cat > "${ENV_FILE}" <<EOF
+API_KEY=${key}
+API_PORT=${BRIDGE_PORT}
+BRIDGE_HOST=127.0.0.1:${BRIDGE_PORT}
+HOST=127.0.0.1
+PORT=${MCP_PORT}
+GRADIO=false
+GRADIO_PORT=8082
+DISABLE_AUTH_CHECK=false
+EOF
+  print_info "Created ${ENV_FILE}"
+}
+
+load_env() {
+  ensure_env_file
+  # shellcheck disable=SC1090
+  set -a; source "${ENV_FILE}"; set +a
+}
+
+apt_install() {
+  local sudo_cmd=""
+  if [[ "$(id -u)" -ne 0 ]]; then
+    sudo_cmd="sudo"
+  fi
+  ${sudo_cmd} apt-get update -y
+  ${sudo_cmd} apt-get install -y git curl sqlite3 python3 python3-venv golang-go
+}
+
+brew_install() {
+  brew install git curl sqlite3 go uv python
+}
+
+install_uv_linux() {
+  if command -v uv >/dev/null 2>&1; then
+    return
+  fi
+  print_info "Installing uv..."
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  if [[ -f "${HOME}/.local/bin/env" ]]; then
+    # shellcheck disable=SC1090
+    source "${HOME}/.local/bin/env"
+  fi
+}
+
+install_deps() {
+  detect_os
+  ensure_dirs
+  ensure_env_file
+
+  if [[ "${OS_TYPE}" == "macos" ]]; then
+    if ! command -v brew >/dev/null 2>&1; then
+      print_error "Homebrew not found. Install from https://brew.sh then rerun."
+      exit 1
+    fi
+    brew_install
+  else
+    apt_install
+    install_uv_linux
+  fi
+
+  require_cmd git
+  require_cmd go
+  require_cmd python3
+  require_cmd curl
+  require_cmd sqlite3
+  require_cmd uv
+
+  print_info "Syncing Python dependencies (with extras for SSE/Gradio)..."
+  (
+    cd "${ROOT_DIR}/whatsapp-mcp-server" \
+      && uv sync --all-extras
+  )
+  print_info "Verifying required Python imports..."
+  (cd "${ROOT_DIR}/whatsapp-mcp-server" && uv run python - <<'PY'
+import importlib
+for m in ("mcp", "requests", "uvicorn", "starlette"):
+    importlib.import_module(m)
+print("ok")
+PY
+  ) >/dev/null
+  print_info "Install completed."
+}
+
+read_pid() {
+  local pid_file="$1"
+  if [[ -f "${pid_file}" ]]; then
+    tr -d '[:space:]' < "${pid_file}"
+  fi
+}
+
+is_running() {
+  local pid="$1"
+  [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1
+}
+
+port_in_use() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+ensure_port_free_or_self() {
+  local port="$1"
+  local pid_file="$2"
+  local name="$3"
+  local pid
+  pid="$(read_pid "${pid_file}")"
+
+  if ! port_in_use "${port}"; then
+    return
+  fi
+
+  if is_running "${pid}"; then
+    return
+  fi
+
+  print_error "Port ${port} is already in use. ${name} cannot start."
+  print_error "Run: wamcp stop"
+  exit 1
+}
+
+build_bridge_binary() {
+  print_info "Building bridge binary..."
+  (cd "${ROOT_DIR}/whatsapp-bridge" && go build -o "${BRIDGE_BIN}" main.go)
+}
+
+start_bridge() {
+  local pid
+  pid="$(read_pid "${BRIDGE_PID_FILE}")"
+  if is_running "${pid}"; then
+    print_info "Bridge already running (pid ${pid})"
+    return
+  fi
+
+  ensure_port_free_or_self "${BRIDGE_PORT}" "${BRIDGE_PID_FILE}" "bridge"
+  load_env
+  build_bridge_binary
+  print_info "Starting bridge on :${API_PORT:-$BRIDGE_PORT} ..."
+  (
+    nohup env \
+      API_KEY="${API_KEY}" \
+      DISABLE_AUTH_CHECK="${DISABLE_AUTH_CHECK}" \
+      API_PORT="${API_PORT:-$BRIDGE_PORT}" \
+      "${BRIDGE_BIN}" >> "${BRIDGE_LOG_FILE}" 2>&1 &
+    echo $! > "${BRIDGE_PID_FILE}"
+  )
+}
+
+start_mcp_sse() {
+  local pid
+  pid="$(read_pid "${MCP_PID_FILE}")"
+  if is_running "${pid}"; then
+    print_info "MCP already running (pid ${pid})"
+    return
+  fi
+
+  ensure_port_free_or_self "${MCP_PORT}" "${MCP_PID_FILE}" "mcp"
+  load_env
+  print_info "Starting MCP SSE on :${PORT:-$MCP_PORT} ..."
+  (
+    cd "${ROOT_DIR}/whatsapp-mcp-server"
+    nohup env \
+      BRIDGE_HOST="${BRIDGE_HOST}" \
+      API_KEY="${API_KEY}" \
+      HOST="${HOST}" \
+      PORT="${PORT:-$MCP_PORT}" \
+      GRADIO=false \
+      uv run python sse-main.py >> "${MCP_LOG_FILE}" 2>&1 &
+    echo $! > "${MCP_PID_FILE}"
+  )
+}
+
+wait_bridge_health() {
+  load_env
+  local retries=30
+  local url="http://127.0.0.1:${API_PORT:-$BRIDGE_PORT}/api/health"
+  while (( retries > 0 )); do
+    local code="000"
+    code="$(curl -sS -o /dev/null -w '%{http_code}' "${url}" || true)"
+    if [[ "${code}" == "200" || "${code}" == "503" ]]; then
+      print_info "Bridge endpoint reachable (${code}): ${url}"
+      return
+    fi
+    retries=$((retries - 1))
+    sleep 1
+  done
+  print_warn "Bridge health check timeout; check logs with 'wamcp logs bridge'"
+}
+
+do_up() {
+  local mode="${1:-sse}"
+  start_bridge
+  wait_bridge_health
+
+  if [[ "${mode}" == "sse" ]]; then
+    start_mcp_sse
+  fi
+
+  print_info "Services started."
+  print_info "Use 'wamcp status' to verify connection state."
+}
+
+pair_phone() {
+  local number="$1"
+  load_env
+  local base_url="http://127.0.0.1:${API_PORT:-$BRIDGE_PORT}"
+  local payload
+  payload="$(printf '{"phone_number":"%s"}' "${number}")"
+
+  local resp
+  resp="$(curl -fsS -X POST "${base_url}/api/pair" \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: ${API_KEY}" \
+    -d "${payload}")"
+
+  python3 - <<'PY' "${resp}"
+import json
+import sys
+obj = json.loads(sys.argv[1])
+if not obj.get("success"):
+    print("[wamcp] ERROR: failed to start phone pairing")
+    if obj.get("error"):
+        print(f"[wamcp] ERROR: {obj['error']}")
+    raise SystemExit(1)
+print(f"[wamcp] Pairing code: {obj.get('code','')}")
+print(f"[wamcp] Expires in: {obj.get('expires_in',0)} seconds")
+print("[wamcp] Enter this code in WhatsApp > Linked Devices > Link with phone number")
+PY
+
+  print_info "Waiting for pairing completion..."
+  local done_flag="false"
+  for _ in $(seq 1 80); do
+    local status_json
+    status_json="$(curl -fsS -H "X-API-Key: ${API_KEY}" "${base_url}/api/pairing")"
+    done_flag="$(python3 - <<'PY' "${status_json}"
+import json
+import sys
+obj = json.loads(sys.argv[1])
+print("true" if obj.get("complete") else "false")
+PY
+)"
+    if [[ "${done_flag}" == "true" ]]; then
+      print_info "Pairing complete."
+      return
+    fi
+    sleep 2
+  done
+
+  print_warn "Pairing not completed yet. Run 'wamcp status' and 'wamcp logs bridge'."
+}
+
+pair_qr() {
+  print_info "QR login uses bridge terminal output."
+  print_info "Run: wamcp logs bridge"
+  print_info "Then scan QR in WhatsApp > Linked Devices > Link a device."
+}
+
+status_cmd() {
+  load_env
+  local base_url="http://127.0.0.1:${API_PORT:-$BRIDGE_PORT}"
+  local bridge_pid mcp_pid
+  bridge_pid="$(read_pid "${BRIDGE_PID_FILE}")"
+  mcp_pid="$(read_pid "${MCP_PID_FILE}")"
+
+  if is_running "${bridge_pid}"; then
+    print_info "bridge: running (pid ${bridge_pid})"
+  else
+    print_info "bridge: stopped"
+  fi
+
+  if is_running "${mcp_pid}"; then
+    print_info "mcp: running (pid ${mcp_pid})"
+  else
+    print_info "mcp: stopped"
+  fi
+
+  if curl -fsS "${base_url}/api/health" >/dev/null 2>&1; then
+    print_info "bridge health: ok"
+  else
+    print_warn "bridge health: unavailable"
+  fi
+
+  if [[ -n "${API_KEY:-}" ]]; then
+    curl -fsS -H "X-API-Key: ${API_KEY}" "${base_url}/api/connection" || true
+    printf "\n"
+  fi
+}
+
+logs_cmd() {
+  local target="${1:-all}"
+  case "${target}" in
+    bridge)
+      if [[ -f "${BRIDGE_LOG_FILE}" ]]; then
+        tail -n 120 "${BRIDGE_LOG_FILE}"
+      else
+        print_warn "No bridge log yet."
+      fi
+      ;;
+    mcp)
+      if [[ -f "${MCP_LOG_FILE}" ]]; then
+        tail -n 120 "${MCP_LOG_FILE}"
+      else
+        print_warn "No mcp log yet."
+      fi
+      ;;
+    all)
+      print_info "--- bridge log ---"
+      logs_cmd bridge
+      print_info "--- mcp log ---"
+      logs_cmd mcp
+      ;;
+    *)
+      print_error "Unknown logs target: ${target}"
+      exit 1
+      ;;
+  esac
+}
+
+stop_one() {
+  local name="$1"
+  local pid_file="$2"
+  local pid
+  pid="$(read_pid "${pid_file}")"
+  if ! is_running "${pid}"; then
+    rm -f "${pid_file}"
+    print_info "${name}: already stopped"
+    return
+  fi
+  kill "${pid}" >/dev/null 2>&1 || true
+  sleep 1
+  if is_running "${pid}"; then
+    kill -9 "${pid}" >/dev/null 2>&1 || true
+  fi
+  rm -f "${pid_file}"
+  print_info "${name}: stopped"
+}
+
+stop_cmd() {
+  stop_one "mcp" "${MCP_PID_FILE}"
+  stop_one "bridge" "${BRIDGE_PID_FILE}"
+}
+
+doctor_cmd() {
+  detect_os
+  print_info "OS: ${OS_TYPE}"
+  for c in git go python3 uv curl sqlite3; do
+    if command -v "${c}" >/dev/null 2>&1; then
+      print_info "ok: ${c} ($(command -v "${c}"))"
+    else
+      print_warn "missing: ${c}"
+    fi
+  done
+  print_info "state dir: ${STATE_DIR}"
+}
+
+self_uninstall_cmd() {
+  local bin="${WAMCP_BIN:-${HOME}/.local/bin/wamcp}"
+  print_warn "This will remove: ${bin}"
+  rm -f "${bin}" || true
+  print_info "Removed global wamcp shim (if present)."
+  print_info "Optional cleanup:"
+  print_info "  rm -rf \"${HOME}/.wamcp-src\""
+  print_info "  rm -rf \"${STATE_DIR}\""
+}
+
+mcp_config_cmd() {
+  cat <<EOF
+Add this into Cursor/Claude MCP config:
+
+{
+  "mcpServers": {
+    "whatsapp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${ROOT_DIR}/whatsapp-mcp-server",
+        "python",
+        "main.py"
+      ],
+      "env": {
+        "BRIDGE_HOST": "127.0.0.1:${BRIDGE_PORT}",
+        "API_KEY": "${API_KEY:-CHANGEME}"
+      }
+    }
+  }
+}
+EOF
+}
+
+main() {
+  local cmd="${1:-}"
+  case "${cmd}" in
+    install)
+      install_deps
+      ;;
+    up)
+      shift || true
+      if [[ "${1:-}" == "--sse" || -z "${1:-}" ]]; then
+        do_up "sse"
+      else
+        print_error "Unknown up flag: ${1}"
+        exit 1
+      fi
+      ;;
+    login)
+      local method="${2:-}"
+      case "${method}" in
+        phone)
+          local number="${3:-}"
+          if [[ -z "${number}" ]]; then
+            print_error "Usage: wamcp login phone <number>"
+            exit 1
+          fi
+          pair_phone "${number}"
+          ;;
+        qr)
+          pair_qr
+          ;;
+        *)
+          print_error "Usage: wamcp login [phone <number>|qr]"
+          exit 1
+          ;;
+      esac
+      ;;
+    status)
+      status_cmd
+      ;;
+    logs)
+      logs_cmd "${2:-all}"
+      ;;
+    stop)
+      stop_cmd
+      ;;
+    doctor)
+      doctor_cmd
+      ;;
+    self)
+      case "${2:-}" in
+        uninstall)
+          self_uninstall_cmd
+          ;;
+        *)
+          print_error "Usage: wamcp self uninstall"
+          exit 1
+          ;;
+      esac
+      ;;
+    mcp-config)
+      mcp_config_cmd
+      ;;
+    ""|-h|--help|help)
+      usage
+      ;;
+    *)
+      print_error "Unknown command: ${cmd}"
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
