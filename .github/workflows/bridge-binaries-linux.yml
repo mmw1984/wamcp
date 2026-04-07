@@ -1,0 +1,67 @@
+# Prebuilt whatsapp-bridge for Linux only (amd64 + arm64), attached to version tags.
+# CGO required (mattn/go-sqlite3). arm64 is cross-built from the ubuntu-amd64 runner.
+
+name: Bridge binaries (Linux amd64 / arm64)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: whatsapp-bridge/go.mod
+          cache-dependency-path: whatsapp-bridge/go.sum
+
+      - name: Install arm64 cross-compiler (CGO)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build linux-amd64
+        env:
+          CGO_ENABLED: "1"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          mkdir -p dist
+          cd whatsapp-bridge
+          go build -trimpath -ldflags="-s -w" -o "${GITHUB_WORKSPACE}/dist/whatsapp-bridge-linux-amd64" .
+
+      - name: Build linux-arm64
+        env:
+          CGO_ENABLED: "1"
+          GOOS: linux
+          GOARCH: arm64
+          CC: aarch64-linux-gnu-gcc
+        run: |
+          cd whatsapp-bridge
+          go build -trimpath -ldflags="-s -w" -o "${GITHUB_WORKSPACE}/dist/whatsapp-bridge-linux-arm64" .
+
+      - name: List artifacts
+        run: ls -lah dist/
+
+      - name: Upload to GitHub Release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload workflow artifact (manual runs / testing)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whatsapp-bridge-linux
+          path: dist/*

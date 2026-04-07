@@ -36,6 +36,15 @@ For stable installs, publish releases (tags) and tell users to pin versions:
 curl -fsSL <install_url> | bash -s -- --ref vX.Y.Z
 ```
 
+### Prebuilt `whatsapp-bridge` (Linux amd64 / arm64)
+
+Workflow **Bridge binaries (Linux amd64 / arm64)** (`.github/workflows/bridge-binaries-linux.yml`) runs on **`v*` tags** and uploads to that GitHub Release:
+
+- `whatsapp-bridge-linux-amd64`
+- `whatsapp-bridge-linux-arm64`
+
+`wamcp start` on Linux downloads the matching asset from **latest release** unless `WAMCP_BRIDGE_SOURCE=true`. Publish a tag (e.g. `v0.1.0`) so VPS installs avoid compiling from source.
+
 If you want faster installs and no `git` requirement, add a tarball approach:
 
 - Release asset: `wamcp-vX.Y.Z.tar.gz`

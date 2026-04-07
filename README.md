@@ -159,7 +159,8 @@ wamcp start --force
 
 ### Ubuntu VPS / small instance (1 vCPU, 1GB)
 
-- **`Building bridge binary...` is slow the first time:** `go.mod` asks for a recent Go toolchain; the first `go build` may download **Go 1.25 + modules** over the network. On a 1 vCPU cloud box this often takes **many minutes**. Let it finish; interrupting leaves a half-built tree and confuses the next start.
+- **Prebuilt bridge (Linux only):** On **Linux x86_64 / arm64**, `wamcp start` tries to download `whatsapp-bridge-linux-amd64` or `whatsapp-bridge-linux-arm64` from the **latest GitHub release** of `mmw1984/wamcp` before running `go build`. There must be at least one **tagged release** with those assets (built by CI). **macOS** always compiles locally. To force compile: `WAMCP_BRIDGE_SOURCE=true wamcp start`. To pin a release: `WAMCP_BRIDGE_RELEASE_TAG=v0.1.0`. To refresh binary: `rm -f ~/.wamcp-src/current/.wamcp/bin/whatsapp-bridge` then start again (or `WAMCP_REBUILD_BRIDGE=true wamcp start`).
+- **`Building bridge binary...` is slow the first time:** If no prebuilt asset fits, `go.mod` may pull a **new Go toolchain + modules**. On a 1 vCPU cloud box this often takes **many minutes**. Let it finish; interrupting leaves a half-built tree and confuses the next start.
 - **`wamcp stop` says stopped but `wamcp start` still complains 8080:** another program is listening (not wamcp’s PID file). Run `sudo ss -ltnp 'sport = :8080'` or `sudo lsof -nP -iTCP:8080 -sTCP:LISTEN`, then stop that service or use `wamcp start --force` after you know it is safe to kill.
 - **Run one command per line** in SSH; pasting `wamcp login phone …` on the same line as build output glues text together and breaks the shell command.
 

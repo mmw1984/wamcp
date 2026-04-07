@@ -16,6 +16,8 @@ MCP_PID_FILE="${RUN_DIR}/mcp.pid"
 BRIDGE_LOG_FILE="${LOG_DIR}/bridge.log"
 MCP_LOG_FILE="${LOG_DIR}/mcp.log"
 BRIDGE_BIN="${BIN_DIR}/whatsapp-bridge"
+# Prebuilt Linux binaries (GitHub Releases); see .github/workflows/bridge-binaries-linux.yml
+WAMCP_REPO_SLUG="${WAMCP_REPO_SLUG:-mmw1984/wamcp}"
 
 POKE_CONFIG_FILE="${STATE_DIR}/poke/config.json"
 POKE_TUNNEL_PID_FILE="${RUN_DIR}/poke-tunnel.pid"
@@ -298,6 +300,92 @@ build_bridge_binary() {
   (cd "${ROOT_DIR}/whatsapp-bridge" && go build -o "${BRIDGE_BIN}" main.go)
 }
 
+bridge_prebuilt_linux_arch() {
+  local m
+  m="$(uname -m)"
+  case "${m}" in
+    x86_64) printf '%s' "amd64" ;;
+    aarch64|arm64) printf '%s' "arm64" ;;
+    *) printf '%s' "" ;;
+  esac
+}
+
+bridge_latest_github_release_tag() {
+  python3 - <<PY "${WAMCP_REPO_SLUG}" || true
+import json, sys, urllib.request
+
+slug = sys.argv[1]
+url = f"https://api.github.com/repos/{slug}/releases/latest"
+req = urllib.request.Request(
+    url,
+    headers={
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "wamcp-bridge-fetch",
+    },
+)
+try:
+    with urllib.request.urlopen(req, timeout=25) as r:
+        tag = json.load(r).get("tag_name") or ""
+    if tag:
+        print(tag)
+except Exception:
+    pass
+PY
+}
+
+# Download prebuilt bridge from GitHub Releases (Linux amd64/arm64 assets only).
+bridge_try_download_prebuilt_linux() {
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    return 1
+  fi
+  local arch
+  arch="$(bridge_prebuilt_linux_arch)"
+  if [[ -z "${arch}" ]]; then
+    return 1
+  fi
+  require_cmd curl || return 1
+  require_cmd python3 || return 1
+
+  local tag="${WAMCP_BRIDGE_RELEASE_TAG:-}"
+  if [[ -z "${tag}" ]]; then
+    tag="$(bridge_latest_github_release_tag)"
+  fi
+  if [[ -z "${tag}" ]]; then
+    return 1
+  fi
+
+  local asset="whatsapp-bridge-linux-${arch}"
+  local url="https://github.com/${WAMCP_REPO_SLUG}/releases/download/${tag}/${asset}"
+  print_info "Trying prebuilt bridge (${asset} @ ${tag}) ..."
+  mkdir -p "${BIN_DIR}"
+  if ! curl -fsSL -o "${BRIDGE_BIN}.part" "${url}"; then
+    rm -f "${BRIDGE_BIN}.part"
+    return 1
+  fi
+  mv -f "${BRIDGE_BIN}.part" "${BRIDGE_BIN}"
+  chmod +x "${BRIDGE_BIN}"
+  return 0
+}
+
+ensure_bridge_binary() {
+  if [[ -x "${BRIDGE_BIN}" ]] && [[ "${WAMCP_REBUILD_BRIDGE:-false}" != "true" ]]; then
+    print_info "Using existing bridge binary: ${BRIDGE_BIN}"
+    return 0
+  fi
+  if [[ "${WAMCP_BRIDGE_SOURCE:-}" == "1" ]] || [[ "${WAMCP_BRIDGE_SOURCE:-}" == "true" ]]; then
+    require_cmd go
+    build_bridge_binary
+    return 0
+  fi
+  if bridge_try_download_prebuilt_linux; then
+    print_info "Using prebuilt Linux bridge from ${WAMCP_REPO_SLUG} releases."
+    return 0
+  fi
+  print_info "No prebuilt Linux binary for this machine or no GitHub release yet; compiling from source (needs go + gcc for sqlite) ..."
+  require_cmd go
+  build_bridge_binary
+}
+
 start_bridge() {
   local pid
   local force="${1:-false}"
@@ -309,7 +397,7 @@ start_bridge() {
 
   ensure_port_free_or_self "${BRIDGE_PORT}" "${BRIDGE_PID_FILE}" "bridge" "${force}"
   load_env
-  build_bridge_binary
+  ensure_bridge_binary
   print_info "Starting bridge on :${API_PORT:-$BRIDGE_PORT} ..."
   (
     nohup env \
