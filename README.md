@@ -157,6 +157,12 @@ Or force start (kills processes that are holding the ports):
 wamcp start --force
 ```
 
+### Ubuntu VPS / small instance (1 vCPU, 1GB)
+
+- **`Building bridge binary...` is slow the first time:** `go.mod` asks for a recent Go toolchain; the first `go build` may download **Go 1.25 + modules** over the network. On a 1 vCPU cloud box this often takes **many minutes**. Let it finish; interrupting leaves a half-built tree and confuses the next start.
+- **`wamcp stop` says stopped but `wamcp start` still complains 8080:** another program is listening (not wamcp’s PID file). Run `sudo ss -ltnp 'sport = :8080'` or `sudo lsof -nP -iTCP:8080 -sTCP:LISTEN`, then stop that service or use `wamcp start --force` after you know it is safe to kill.
+- **Run one command per line** in SSH; pasting `wamcp login phone …` on the same line as build output glues text together and breaks the shell command.
+
 ## Poke integration (optional)
 
 Forward your local MCP SSE server to Poke and receive notifications when new WhatsApp messages arrive.

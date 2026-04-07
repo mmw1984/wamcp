@@ -285,13 +285,16 @@ ensure_port_free_or_self() {
   fi
 
   print_error "Port ${port} is already in use. ${name} cannot start."
+  print_error "If wamcp stop did not free it, another process is using the port. Inspect:"
+  print_error "  sudo ss -ltnp \"sport = :${port}\"  OR  sudo lsof -nP -iTCP:${port} -sTCP:LISTEN"
   print_error "Run: wamcp stop"
   print_error "Or:  wamcp start --force"
   exit 1
 }
 
 build_bridge_binary() {
-  print_info "Building bridge binary..."
+  print_info "Building bridge binary (whatsapp-bridge)..."
+  print_info "First build: Go may download toolchain + modules (go.mod). On a 1 CPU VPS this can take many minutes — wait until it finishes."
   (cd "${ROOT_DIR}/whatsapp-bridge" && go build -o "${BRIDGE_BIN}" main.go)
 }
 
