@@ -14,7 +14,7 @@ export PATH="$HOME/.local/bin:$PATH"
 ```bash
 wamcp doctor
 wamcp install
-wamcp up
+wamcp start
 wamcp login qr   # or: wamcp login phone <countrycode+number>
 ```
 
@@ -22,7 +22,7 @@ wamcp login qr   # or: wamcp login phone <countrycode+number>
 
 ```bash
 wamcp stop
-wamcp up
+wamcp start
 wamcp logs
 ```
 
@@ -51,7 +51,7 @@ If 8080/8081 are already used, you can start with different ports:
 
 ```bash
 wamcp stop
-BRIDGE_PORT=8180 MCP_PORT=8181 wamcp up
+BRIDGE_PORT=8180 MCP_PORT=8181 wamcp start --force
 ```
 
 If you also use stdio MCP config, regenerate after changing ports:
@@ -151,6 +151,54 @@ Stop `wamcp` services (recommended):
 wamcp stop
 ```
 
+Or force start (kills processes that are holding the ports):
+
+```bash
+wamcp start --force
+```
+
+## Poke integration (optional)
+
+Forward your local MCP SSE server to Poke and receive notifications when new WhatsApp messages arrive.
+
+**Requirements:** Node.js 18+, `npx`, and `npm`. The first `wamcp poke setup` or `wamcp poke watch` runs `npm install poke` once under your wamcp state directory (default: `<repo>/.wamcp/poke/`, or `$WAMCP_HOME/poke/` if set) so the ESM watcher can import the SDK reliably.
+
+### Setup (login + tunnel)
+
+```bash
+wamcp start
+wamcp poke setup
+```
+
+`wamcp poke setup` runs the tunnel **in the background** (same as `poke tunnel http://localhost:8081/sse -n wamcp`); the colourful CLI text is in **`wamcp poke logs tunnel`**, not in your terminal.
+
+### Start watcher (background)
+
+```bash
+wamcp poke watch
+wamcp poke status
+```
+
+Modes:
+
+- **DM**: always notify
+- **Group**:
+  - `group_all`: notify every group message
+  - `group_tag_only`: notify only when you are mentioned (fallback: message text contains your phone number)
+
+### Stop / logs
+
+```bash
+wamcp poke logs              # tunnel + watch (last 120 lines each)
+wamcp poke logs watch        # watcher only (recommended when debugging notify)
+wamcp poke logs tunnel
+wamcp poke stop              # stop tunnel + watcher
+wamcp poke stop watch        # stop watcher only (keep tunnel for Poke)
+wamcp poke stop tunnel
+```
+
+Each successful `wamcp poke watch` **clears** `poke-watch.log` first so old `ERR_MODULE_NOT_FOUND …/scripts/...` lines from earlier installs do not appear mixed with the new run.
+
 If you must kill a stuck process, use the PID from `lsof`:
 
 ```bash
@@ -195,7 +243,7 @@ cd ~/.wamcp-src/current/whatsapp-bridge
 go get -u go.mau.fi/whatsmeow@latest
 go mod tidy
 wamcp stop
-wamcp up
+wamcp start --force
 ```
 
 ## MCP Tools (41 Total)
@@ -305,36 +353,8 @@ When you see `Client outdated (405)` errors:
 cd whatsapp-bridge
 go get -u go.mau.fi/whatsmeow@latest
 go mod tidy
-docker-compose build whatsapp-bridge
-docker-compose up -d whatsapp-bridge
-```
-
-## Ports
-
-| Service | Port | Description |
-|---------|------|-------------|
-| Bridge API | 8080 (→8180) | REST API |
-| MCP Server | 8081 | SSE transport |
-| Gradio UI | 8082 | Web testing UI |
-| Webhook UI | 8089 | Webhook management |
-
-## Troubleshooting
-
-### Messages Not Delivering
-
-If API returns success but messages show single checkmark:
-
-```bash
-docker-compose restart whatsapp-bridge
-docker-compose logs --tail=10 whatsapp-bridge
-# Should see: "✓ Connected to WhatsApp!"
-```
-
-### QR Code Issues
-
-```bash
-docker-compose logs -f whatsapp-bridge
-# Scan QR with WhatsApp mobile app
+wamcp stop
+wamcp start --force
 ```
 
 ## Credits

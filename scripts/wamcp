@@ -17,6 +17,12 @@ BRIDGE_LOG_FILE="${LOG_DIR}/bridge.log"
 MCP_LOG_FILE="${LOG_DIR}/mcp.log"
 BRIDGE_BIN="${BIN_DIR}/whatsapp-bridge"
 
+POKE_CONFIG_FILE="${STATE_DIR}/poke/config.json"
+POKE_TUNNEL_PID_FILE="${RUN_DIR}/poke-tunnel.pid"
+POKE_WATCH_PID_FILE="${RUN_DIR}/poke-watch.pid"
+POKE_TUNNEL_LOG_FILE="${LOG_DIR}/poke-tunnel.log"
+POKE_WATCH_LOG_FILE="${LOG_DIR}/poke-watch.log"
+
 BRIDGE_PORT="${BRIDGE_PORT:-8080}"
 MCP_PORT="${MCP_PORT:-8081}"
 
@@ -49,6 +55,11 @@ Usage:
   wamcp stop
   wamcp doctor
   wamcp mcp-config
+  wamcp poke setup
+  wamcp poke watch
+  wamcp poke status
+  wamcp poke logs [watch|tunnel|all]
+  wamcp poke stop [watch|tunnel|all]
   wamcp self uninstall
 
 Notes:
@@ -71,7 +82,7 @@ detect_os() {
 }
 
 ensure_dirs() {
-  mkdir -p "${STATE_DIR}" "${RUN_DIR}" "${LOG_DIR}" "${BIN_DIR}" "${ROOT_DIR}/store" "${ROOT_DIR}/media"
+  mkdir -p "${STATE_DIR}" "${RUN_DIR}" "${LOG_DIR}" "${BIN_DIR}" "${STATE_DIR}/poke" "${ROOT_DIR}/store" "${ROOT_DIR}/media"
 }
 
 require_cmd() {
@@ -97,6 +108,7 @@ PY
 }
 
 ensure_env_file() {
+  ensure_dirs
   if [[ -f "${ENV_FILE}" ]]; then
     return
   fi
@@ -330,12 +342,18 @@ wait_bridge_health() {
   load_env
   local retries=30
   local url="http://127.0.0.1:${API_PORT:-$BRIDGE_PORT}/api/health"
+  local said_wait="false"
   while (( retries > 0 )); do
     local code="000"
-    code="$(curl -sS -o /dev/null -w '%{http_code}' "${url}" || true)"
+    # 2>/dev/null: avoid noisy "curl: (7) Failed to connect" on stderr while the binary is still binding.
+    code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 1 --max-time 4 "${url}" 2>/dev/null || true)"
     if [[ "${code}" == "200" || "${code}" == "503" ]]; then
       print_info "Bridge endpoint reachable (${code}): ${url}"
       return
+    fi
+    if [[ "${said_wait}" == "false" ]]; then
+      print_info "Waiting for bridge (first seconds after start are normal; log: ${BRIDGE_LOG_FILE})"
+      said_wait="true"
     fi
     retries=$((retries - 1))
     sleep 1
@@ -407,9 +425,21 @@ PY
 }
 
 pair_qr() {
-  print_info "QR login uses bridge terminal output."
-  print_info "Run: wamcp logs bridge"
-  print_info "Then scan QR in WhatsApp > Linked Devices > Link a device."
+  load_env
+  local base_url="http://127.0.0.1:${API_PORT:-$BRIDGE_PORT}"
+  local code="000"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 1 --max-time 4 "${base_url}/api/health" 2>/dev/null || true)"
+  if [[ "${code}" != "200" && "${code}" != "503" ]]; then
+    print_error "Bridge is not reachable at ${base_url} (HTTP ${code})."
+    print_error "Start it with: wamcp start"
+    exit 1
+  fi
+  print_info "QR is printed by the bridge when this device is not linked yet (ASCII blocks in the log)."
+  print_info "Bridge log file: ${BRIDGE_LOG_FILE}"
+  print_info "Show recent lines:  wamcp logs bridge"
+  print_info "Follow live:          tail -f \"${BRIDGE_LOG_FILE}\""
+  print_info "WhatsApp: Settings → Linked devices → Link a device → scan the QR shown in that log."
+  print_warn "If you see no QR, you may already be linked — try: wamcp status  (or reset session per README)."
 }
 
 status_cmd() {
@@ -460,11 +490,29 @@ logs_cmd() {
         print_warn "No mcp log yet."
       fi
       ;;
+    poke-tunnel)
+      if [[ -f "${POKE_TUNNEL_LOG_FILE}" ]]; then
+        tail -n 120 "${POKE_TUNNEL_LOG_FILE}"
+      else
+        print_warn "No poke tunnel log yet."
+      fi
+      ;;
+    poke-watch)
+      if [[ -f "${POKE_WATCH_LOG_FILE}" ]]; then
+        tail -n 120 "${POKE_WATCH_LOG_FILE}"
+      else
+        print_warn "No poke watch log yet."
+      fi
+      ;;
     all)
       print_info "--- bridge log ---"
       logs_cmd bridge
       print_info "--- mcp log ---"
       logs_cmd mcp
+      print_info "--- poke tunnel log ---"
+      logs_cmd poke-tunnel
+      print_info "--- poke watch log ---"
+      logs_cmd poke-watch
       ;;
     *)
       print_error "Unknown logs target: ${target}"
@@ -497,6 +545,26 @@ stop_cmd() {
   stop_one "bridge" "${BRIDGE_PID_FILE}"
 }
 
+stop_poke_cmd() {
+  local which="${1:-all}"
+  case "${which}" in
+    watch|w)
+      stop_one "poke-watch" "${POKE_WATCH_PID_FILE}"
+      ;;
+    tunnel|t)
+      stop_one "poke-tunnel" "${POKE_TUNNEL_PID_FILE}"
+      ;;
+    all)
+      stop_one "poke-watch" "${POKE_WATCH_PID_FILE}"
+      stop_one "poke-tunnel" "${POKE_TUNNEL_PID_FILE}"
+      ;;
+    *)
+      print_error "Usage: wamcp poke stop [watch|tunnel|all]"
+      exit 1
+      ;;
+  esac
+}
+
 doctor_cmd() {
   detect_os
   print_info "OS: ${OS_TYPE}"
@@ -521,6 +589,11 @@ self_uninstall_cmd() {
 }
 
 mcp_config_cmd() {
+  load_env
+  if [[ -z "${API_KEY:-}" ]]; then
+    print_warn "API_KEY is empty; check ${ENV_FILE} (run: wamcp install)"
+  fi
+  print_info "Stdio MCP uses the same API_KEY as the bridge; it is read from ${ENV_FILE}."
   cat <<EOF
 Add this into Cursor/Claude MCP config:
 
@@ -536,13 +609,194 @@ Add this into Cursor/Claude MCP config:
         "main.py"
       ],
       "env": {
-        "BRIDGE_HOST": "127.0.0.1:${BRIDGE_PORT}",
-        "API_KEY": "${API_KEY:-CHANGEME}"
+        "BRIDGE_HOST": "${BRIDGE_HOST}",
+        "API_KEY": "${API_KEY}"
       }
     }
   }
 }
 EOF
+}
+
+poke_require_node_cmds() {
+  detect_os
+  if ! command -v node >/dev/null 2>&1; then
+    print_error "node is required for wamcp poke (Node.js >= 18)"
+    if [[ "${OS_TYPE}" == "macos" ]]; then
+      print_info "Install: brew install node"
+    else
+      print_info "Install: sudo apt-get update && sudo apt-get install -y nodejs npm"
+    fi
+    exit 1
+  fi
+  local major
+  major="$(node -p 'process.versions.node.split(".")[0]')"
+  if [[ "${major}" -lt 18 ]]; then
+    print_error "Node.js >= 18 required (found ${major})"
+    exit 1
+  fi
+  if ! command -v npx >/dev/null 2>&1; then
+    print_error "npx is required for wamcp poke"
+    exit 1
+  fi
+}
+
+poke_write_default_config() {
+  ensure_dirs
+  load_env
+  if [[ -f "${POKE_CONFIG_FILE}" ]]; then
+    return
+  fi
+  mkdir -p "$(dirname "${POKE_CONFIG_FILE}")"
+  cat > "${POKE_CONFIG_FILE}" <<EOF
+{
+  "interval_ms": 30000,
+  "mode": { "dm": true, "group": "tag" },
+  "my_phone": "",
+  "chat_filter": null
+}
+EOF
+}
+
+# ESM import "poke" only resolves from node_modules next to the .mjs file (or above).
+# npx -p poke -c "node /path/script.mjs" does not put poke on that resolution path, so we npm install locally.
+poke_ensure_local_poke_pkg() {
+  poke_require_node_cmds
+  detect_os
+  if ! command -v npm >/dev/null 2>&1; then
+    print_error "npm is required to install the poke package for wamcp poke watch"
+    if [[ "${OS_TYPE}" == "macos" ]]; then
+      print_info "Install Node (includes npm): brew install node"
+    else
+      print_info "Install: sudo apt-get update && sudo apt-get install -y npm"
+    fi
+    exit 1
+  fi
+  ensure_dirs
+  local poke_dir="${STATE_DIR}/poke"
+  mkdir -p "${poke_dir}"
+  if [[ ! -d "${poke_dir}/node_modules/poke" ]]; then
+    print_info "Installing npm package 'poke' under ${poke_dir} (one-time)..."
+    if ! (cd "${poke_dir}" && npm init -y >/dev/null 2>&1 && npm install poke --save --no-fund --no-audit); then
+      print_error "npm install poke failed"
+      exit 1
+    fi
+  fi
+  local watch_src="${ROOT_DIR}/scripts/wamcp-poke-watch.mjs"
+  local watch_dst="${poke_dir}/wamcp-poke-watch.mjs"
+  rm -f "${watch_dst}"
+  if ! cat "${watch_src}" >"${watch_dst}"; then
+    print_error "failed to copy wamcp-poke-watch.mjs into ${poke_dir}"
+    exit 1
+  fi
+}
+
+poke_setup_cmd() {
+  poke_require_node_cmds
+  ensure_dirs
+  load_env
+  poke_write_default_config
+  poke_ensure_local_poke_pkg
+
+  print_info "Starting Poke login (interactive)..."
+  if command -v poke >/dev/null 2>&1; then
+    poke login
+  else
+    npx -y poke login
+  fi
+
+  print_info "Starting Poke tunnel in background..."
+  # Match foreground UX: same URL style as `poke tunnel http://localhost:8081/sse -n wamcp`
+  local url="http://localhost:${MCP_PORT}/sse"
+  if command -v poke >/dev/null 2>&1; then
+    nohup poke tunnel "${url}" -n wamcp >> "${POKE_TUNNEL_LOG_FILE}" 2>&1 &
+  else
+    nohup npx -y poke tunnel "${url}" -n wamcp >> "${POKE_TUNNEL_LOG_FILE}" 2>&1 &
+  fi
+  echo $! > "${POKE_TUNNEL_PID_FILE}"
+
+  print_info ""
+  print_info "✓ Tunnel is active! (background — same as manual poke tunnel)"
+  print_info "  Name:  wamcp"
+  print_info "  Local: ${url}"
+  print_info "Full poke CLI output:  wamcp poke logs tunnel"
+  print_info "Next: wamcp poke watch"
+}
+
+poke_watch_cmd() {
+  poke_require_node_cmds
+  ensure_dirs
+  load_env
+
+  poke_write_default_config
+  poke_ensure_local_poke_pkg
+
+  local pid
+  pid="$(read_pid "${POKE_WATCH_PID_FILE}")"
+  if is_running "${pid}"; then
+    print_info "poke-watch already running (pid ${pid})"
+    return
+  fi
+
+  print_info "Starting poke watcher in background..."
+  local watch_js="${STATE_DIR}/poke/wamcp-poke-watch.mjs"
+  # Fresh log so stale ERR_MODULE lines from old runs / old entrypoints do not confuse `poke logs`.
+  : >"${POKE_WATCH_LOG_FILE}"
+  {
+    printf "[wamcp] poke-watch log session start %s (script=%s)\n" "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date)" "${watch_js}"
+  } >>"${POKE_WATCH_LOG_FILE}"
+  # Absolute path: resolution for import "poke" walks from dirname(script); cwd does not matter.
+  nohup env \
+    WAMCP_ROOT="${ROOT_DIR}" \
+    WAMCP_POKE_CONFIG="${POKE_CONFIG_FILE}" \
+    WAMCP_POKE_STATE="${STATE_DIR}/poke/state.json" \
+    API_KEY="${API_KEY}" \
+    BRIDGE_HOST="${BRIDGE_HOST}" \
+    node "${watch_js}" >>"${POKE_WATCH_LOG_FILE}" 2>&1 &
+  echo $! >"${POKE_WATCH_PID_FILE}"
+  print_info "poke-watch started (pid $(read_pid "${POKE_WATCH_PID_FILE}"))"
+}
+
+poke_status_cmd() {
+  local tunnel_pid watch_pid
+  tunnel_pid="$(read_pid "${POKE_TUNNEL_PID_FILE}")"
+  watch_pid="$(read_pid "${POKE_WATCH_PID_FILE}")"
+  if is_running "${tunnel_pid}"; then
+    print_info "poke-tunnel: running (pid ${tunnel_pid})"
+  else
+    print_info "poke-tunnel: stopped"
+  fi
+  if is_running "${watch_pid}"; then
+    print_info "poke-watch: running (pid ${watch_pid})"
+  else
+    print_info "poke-watch: stopped"
+  fi
+  print_info "config: ${POKE_CONFIG_FILE}"
+}
+
+poke_logs_cmd() {
+  local which="${1:-all}"
+  case "${which}" in
+    watch|w)
+      print_info "poke-watch log: ${POKE_WATCH_LOG_FILE}"
+      logs_cmd poke-watch
+      ;;
+    tunnel|t)
+      print_info "poke-tunnel log: ${POKE_TUNNEL_LOG_FILE}"
+      logs_cmd poke-tunnel
+      ;;
+    all)
+      print_info "Tip: wamcp poke logs watch  or  wamcp poke logs tunnel  for one stream only."
+      print_info "--- poke tunnel log ---"
+      logs_cmd poke-tunnel
+      print_info "--- poke watch log ---"
+      logs_cmd poke-watch
+      ;;
+    *)
+      print_error "Usage: wamcp poke logs [watch|tunnel|all]"
+      exit 1
+      ;;
+  esac
 }
 
 main() {
@@ -618,6 +872,29 @@ main() {
       ;;
     mcp-config)
       mcp_config_cmd
+      ;;
+    poke)
+      case "${2:-}" in
+        setup)
+          poke_setup_cmd
+          ;;
+        watch)
+          poke_watch_cmd
+          ;;
+        status)
+          poke_status_cmd
+          ;;
+        logs)
+          poke_logs_cmd "${3:-all}"
+          ;;
+        stop)
+          stop_poke_cmd "${3:-all}"
+          ;;
+        *)
+          print_error "Usage: wamcp poke {setup|watch|status|logs|stop}  (logs/stop: optional watch|tunnel|all)"
+          exit 1
+          ;;
+      esac
       ;;
     ""|-h|--help|help)
       usage

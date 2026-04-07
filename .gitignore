@@ -41,6 +41,9 @@ Thumbs.db
 .claude/
 .task.yaml
 
+# wamcp local state (contains generated API_KEY — never commit)
+.wamcp/
+
 # Secrets and credentials
 .env
 .env.local
