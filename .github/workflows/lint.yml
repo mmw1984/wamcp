@@ -16,7 +16,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: whatsapp-bridge/go.mod
           cache-dependency-path: whatsapp-bridge/go.sum
 
       - name: golangci-lint
@@ -45,21 +45,3 @@ jobs:
 
       - name: Run ruff format check
         run: ruff format --check whatsapp-mcp-server/
-
-  dockerfile-lint:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Lint Dockerfiles
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: Dockerfile.bridge
-          failure-threshold: warning
-
-      - name: Lint MCP Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: Dockerfile.mcp
-          failure-threshold: warning

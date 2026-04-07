@@ -10,6 +10,7 @@ from .utils import MESSAGES_DB_PATH, WHATSAPP_DB_PATH, get_sender_name, logger
 
 class DatabaseError(Exception):
     """Custom exception for database operations."""
+
     pass
 
 
@@ -23,7 +24,7 @@ def list_messages(
     page: int = 0,
     include_context: bool = False,
     context_before: int = 1,
-    context_after: int = 1
+    context_after: int = 1,
 ) -> list[dict[str, Any]]:
     """Get messages matching the specified criteria.
 
@@ -113,7 +114,7 @@ def list_messages(
                 media_type=msg[7],
                 filename=msg[8],
                 file_length=msg[9],
-                sender_name=sender_name
+                sender_name=sender_name,
             )
             result.append(message)
 
@@ -141,7 +142,7 @@ def list_messages(
         logger.error("Database error in list_messages: %s", e)
         raise DatabaseError(f"Failed to list messages: {e}") from e
     finally:
-        if 'conn' in locals():
+        if "conn" in locals():
             conn.close()
 
 
@@ -164,7 +165,8 @@ def get_message_context(message_id: str, before: int = 5, after: int = 5) -> Mes
         conn = sqlite3.connect(MESSAGES_DB_PATH)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT messages.timestamp, messages.sender, chats.name, messages.content,
                    messages.is_from_me, chats.jid, messages.id, messages.chat_jid,
                    messages.media_type, messages.filename, messages.file_length,
@@ -172,7 +174,9 @@ def get_message_context(message_id: str, before: int = 5, after: int = 5) -> Mes
             FROM messages
             JOIN chats ON messages.chat_jid = chats.jid
             WHERE messages.id = ?
-        """, (message_id,))
+        """,
+            (message_id,),
+        )
         msg_data = cursor.fetchone()
 
         if not msg_data:
@@ -191,11 +195,12 @@ def get_message_context(message_id: str, before: int = 5, after: int = 5) -> Mes
             media_type=msg_data[8],
             filename=msg_data[9],
             file_length=msg_data[10],
-            sender_name=sender_name
+            sender_name=sender_name,
         )
 
         # Get messages before
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT messages.timestamp, messages.sender, chats.name, messages.content,
                    messages.is_from_me, chats.jid, messages.id, messages.media_type,
                    messages.filename, messages.file_length, messages.sender_name
@@ -204,21 +209,30 @@ def get_message_context(message_id: str, before: int = 5, after: int = 5) -> Mes
             WHERE messages.chat_jid = ? AND messages.timestamp < ?
             ORDER BY messages.timestamp DESC
             LIMIT ?
-        """, (msg_data[7], msg_data[0], before))
+        """,
+            (msg_data[7], msg_data[0], before),
+        )
 
         before_messages = [
             Message(
                 timestamp=datetime.fromisoformat(msg[0]),
-                sender=msg[1], chat_name=msg[2], content=msg[3],
-                is_from_me=msg[4], chat_jid=msg[5], id=msg[6],
-                media_type=msg[7], filename=msg[8], file_length=msg[9],
-                sender_name=msg[10] if msg[10] else get_sender_name(msg[1])
+                sender=msg[1],
+                chat_name=msg[2],
+                content=msg[3],
+                is_from_me=msg[4],
+                chat_jid=msg[5],
+                id=msg[6],
+                media_type=msg[7],
+                filename=msg[8],
+                file_length=msg[9],
+                sender_name=msg[10] if msg[10] else get_sender_name(msg[1]),
             )
             for msg in cursor.fetchall()
         ]
 
         # Get messages after
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT messages.timestamp, messages.sender, chats.name, messages.content,
                    messages.is_from_me, chats.jid, messages.id, messages.media_type,
                    messages.filename, messages.file_length, messages.sender_name
@@ -227,30 +241,34 @@ def get_message_context(message_id: str, before: int = 5, after: int = 5) -> Mes
             WHERE messages.chat_jid = ? AND messages.timestamp > ?
             ORDER BY messages.timestamp ASC
             LIMIT ?
-        """, (msg_data[7], msg_data[0], after))
+        """,
+            (msg_data[7], msg_data[0], after),
+        )
 
         after_messages = [
             Message(
                 timestamp=datetime.fromisoformat(msg[0]),
-                sender=msg[1], chat_name=msg[2], content=msg[3],
-                is_from_me=msg[4], chat_jid=msg[5], id=msg[6],
-                media_type=msg[7], filename=msg[8], file_length=msg[9],
-                sender_name=msg[10] if msg[10] else get_sender_name(msg[1])
+                sender=msg[1],
+                chat_name=msg[2],
+                content=msg[3],
+                is_from_me=msg[4],
+                chat_jid=msg[5],
+                id=msg[6],
+                media_type=msg[7],
+                filename=msg[8],
+                file_length=msg[9],
+                sender_name=msg[10] if msg[10] else get_sender_name(msg[1]),
             )
             for msg in cursor.fetchall()
         ]
 
-        return MessageContext(
-            message=target_message,
-            before=list(reversed(before_messages)),
-            after=after_messages
-        )
+        return MessageContext(message=target_message, before=list(reversed(before_messages)), after=after_messages)
 
     except sqlite3.Error as e:
         logger.error("Database error in get_message_context: %s", e)
         raise DatabaseError(f"Failed to get message context: {e}") from e
     finally:
-        if 'conn' in locals():
+        if "conn" in locals():
             conn.close()
 
 
@@ -259,7 +277,7 @@ def list_chats(
     limit: int = 20,
     page: int = 0,
     include_last_message: bool = True,
-    sort_by: str = "last_active"
+    sort_by: str = "last_active",
 ) -> list[dict[str, Any]]:
     """Get chats matching specified criteria.
 
@@ -327,7 +345,7 @@ def list_chats(
                 last_message_id=chat[4],
                 last_sender=chat[5],
                 last_sender_name=last_sender_name,
-                last_is_from_me=bool(chat[6]) if chat[6] is not None else None
+                last_is_from_me=bool(chat[6]) if chat[6] is not None else None,
             )
             result.append(chat_obj.to_dict())
 
@@ -337,7 +355,7 @@ def list_chats(
         logger.error("Database error in list_chats: %s", e)
         raise DatabaseError(f"Failed to list chats: {e}") from e
     finally:
-        if 'conn' in locals():
+        if "conn" in locals():
             conn.close()
 
 
@@ -354,12 +372,15 @@ def get_contact_by_jid(jid: str) -> Contact | None:
         conn = sqlite3.connect(WHATSAPP_DB_PATH)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT their_jid, first_name, full_name, push_name, business_name
             FROM whatsmeow_contacts
             WHERE their_jid = ?
             LIMIT 1
-        """, (jid,))
+        """,
+            (jid,),
+        )
 
         result = cursor.fetchone()
         if not result:
@@ -378,14 +399,14 @@ def get_contact_by_jid(jid: str) -> Contact | None:
             full_name=result[2],
             push_name=result[3],
             business_name=result[4],
-            nickname=nickname
+            nickname=nickname,
         )
 
     except sqlite3.Error as e:
         logger.error("Database error in get_contact_by_jid: %s", e)
         return None
     finally:
-        if 'conn' in locals():
+        if "conn" in locals():
             conn.close()
 
 
@@ -402,9 +423,12 @@ def get_contact_nickname(jid: str) -> str | None:
         conn = sqlite3.connect(MESSAGES_DB_PATH)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT nickname FROM contact_nicknames WHERE jid = ?
-        """, (jid,))
+        """,
+            (jid,),
+        )
 
         result = cursor.fetchone()
         return result[0] if result else None
@@ -412,7 +436,7 @@ def get_contact_nickname(jid: str) -> str | None:
     except sqlite3.Error:
         return None
     finally:
-        if 'conn' in locals():
+        if "conn" in locals():
             conn.close()
 
 
@@ -430,25 +454,23 @@ def set_contact_nickname(jid: str, nickname: str) -> dict[str, Any]:
         conn = sqlite3.connect(MESSAGES_DB_PATH)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO contact_nicknames (jid, nickname, updated_at)
             VALUES (?, ?, datetime('now'))
-        """, (jid, nickname))
+        """,
+            (jid, nickname),
+        )
 
         conn.commit()
 
-        return {
-            "success": True,
-            "jid": jid,
-            "nickname": nickname,
-            "updated_at": datetime.now().isoformat()
-        }
+        return {"success": True, "jid": jid, "nickname": nickname, "updated_at": datetime.now().isoformat()}
 
     except sqlite3.Error as e:
         logger.error("Database error in set_contact_nickname: %s", e)
         raise DatabaseError(f"Failed to set nickname: {e}") from e
     finally:
-        if 'conn' in locals():
+        if "conn" in locals():
             conn.close()
 
 
@@ -465,7 +487,8 @@ def search_contacts(query: str) -> list[dict[str, Any]]:
         conn = sqlite3.connect(WHATSAPP_DB_PATH)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT their_jid, first_name, full_name, push_name, business_name
             FROM whatsmeow_contacts
             WHERE LOWER(first_name) LIKE LOWER(?)
@@ -473,7 +496,9 @@ def search_contacts(query: str) -> list[dict[str, Any]]:
                OR LOWER(push_name) LIKE LOWER(?)
                OR their_jid LIKE ?
             LIMIT 50
-        """, (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"))
+        """,
+            (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"),
+        )
 
         results = []
         for row in cursor.fetchall():
@@ -489,7 +514,7 @@ def search_contacts(query: str) -> list[dict[str, Any]]:
                 full_name=row[2],
                 push_name=row[3],
                 business_name=row[4],
-                nickname=nickname
+                nickname=nickname,
             )
             results.append(contact.to_dict())
 
@@ -499,5 +524,5 @@ def search_contacts(query: str) -> list[dict[str, Any]]:
         logger.error("Database error in search_contacts: %s", e)
         raise DatabaseError(f"Failed to search contacts: {e}") from e
     finally:
-        if 'conn' in locals():
+        if "conn" in locals():
             conn.close()

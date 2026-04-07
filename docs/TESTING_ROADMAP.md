@@ -66,10 +66,10 @@ Current coverage target: 50%. This document tracks untested functionality for fu
 2. Media upload → path validation → file serving
 3. Group operations → participant management
 
-### Docker Compose Tests
-1. Service health checks
-2. Inter-service communication
-3. Database persistence
+### Non-Docker / `wamcp` integration (manual)
+1. `wamcp start` → bridge + MCP health
+2. Bridge ↔ MCP API calls with `API_KEY`
+3. SQLite persistence under `store/`
 
 ## Running Tests
 

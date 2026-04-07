@@ -2,7 +2,7 @@
 
 **Review Date:** 2025-12-25
 **Remediation Date:** 2025-12-25
-**Scope:** Full codebase review (Go, Python, Docker, Documentation)
+**Scope:** Full codebase review (Go, Python, documentation)
 **Overall Score:** ~~6.5/10~~ → 7.5/10 (after remediation)
 
 ---
@@ -17,7 +17,7 @@ The WhatsApp MCP Extended project demonstrates **solid architectural design** an
 |-------|-----|
 | Debug prints in production | Removed all `fmt.Println` statements |
 | Large monolithic Python file | Split into `lib/models.py`, `lib/database.py`, `lib/bridge.py`, `lib/utils.py` |
-| No CI/CD | Added GitHub Actions (Go tests, Python lint, Docker build) |
+| No CI/CD | Added GitHub Actions (Go tests, Python lint) |
 | Inconsistent logging | Structured logging implemented |
 
 ### Remaining
@@ -540,7 +540,7 @@ def mock_bridge(httpx_mock):
 
 - [x] MIT License
 - [x] README with features and setup
-- [x] Docker support
+- [x] Non-Docker / `wamcp` distribution
 - [x] CONTRIBUTING.md (basic)
 - [x] Issue templates
 - [x] PR template

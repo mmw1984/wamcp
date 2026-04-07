@@ -349,7 +349,7 @@ cd whatsapp-webhook-ui && python3 -m http.server 8089
 
 ```bash
 cd whatsapp-mcp-server
-uv run python check.py  # Catches errors before docker build
+uv run python check.py  # Catches errors before commit / CI
 ```
 
 ### Updating whatsmeow

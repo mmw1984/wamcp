@@ -1,4 +1,5 @@
 """WhatsApp MCP Server - stdio transport for Claude Code CLI"""
+
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -55,6 +56,7 @@ from whatsapp import update_group as whatsapp_update_group
 # Initialize FastMCP server
 mcp = FastMCP("whatsapp-extended")
 
+
 @mcp.tool()
 def search_contacts(query: str) -> list[dict[str, Any]]:
     """Search WhatsApp contacts by name or phone number.
@@ -72,6 +74,7 @@ def search_contacts(query: str) -> list[dict[str, Any]]:
     """
     return whatsapp_search_contacts(query)
 
+
 @mcp.tool()
 def list_messages(
     after: str | None = None,
@@ -79,7 +82,7 @@ def list_messages(
     chat_jid: str | None = None,
     query: str | None = None,
     limit: int = 20,
-    page: int = 0
+    page: int = 0,
 ) -> list[dict[str, Any]]:
     """Get WhatsApp messages matching specified criteria.
 
@@ -106,9 +109,10 @@ def list_messages(
         page=page,
         include_context=False,
         context_before=1,
-        context_after=1
+        context_after=1,
     )
     return messages
+
 
 @mcp.tool()
 def list_chats(
@@ -116,7 +120,7 @@ def list_chats(
     limit: int = 20,
     page: int = 0,
     include_last_message: bool = True,
-    sort_by: str = "last_active"
+    sort_by: str = "last_active",
 ) -> list[dict[str, Any]]:
     """Get WhatsApp chats matching specified criteria.
 
@@ -133,13 +137,10 @@ def list_chats(
         - For group chats (jid ends with @g.us), use `get_group_info` for participant list
     """
     chats = whatsapp_list_chats(
-        query=query,
-        limit=limit,
-        page=page,
-        include_last_message=include_last_message,
-        sort_by=sort_by
+        query=query, limit=limit, page=page, include_last_message=include_last_message, sort_by=sort_by
     )
     return chats
+
 
 @mcp.tool()
 def get_chat(chat_jid: str, include_last_message: bool = True) -> dict[str, Any]:
@@ -152,6 +153,7 @@ def get_chat(chat_jid: str, include_last_message: bool = True) -> dict[str, Any]
     chat = whatsapp_get_chat(chat_jid, include_last_message)
     return chat
 
+
 @mcp.tool()
 def get_direct_chat_by_contact(sender_phone_number: str) -> dict[str, Any]:
     """Get WhatsApp chat metadata by sender phone number.
@@ -161,6 +163,7 @@ def get_direct_chat_by_contact(sender_phone_number: str) -> dict[str, Any]:
     """
     chat = whatsapp_get_direct_chat_by_contact(sender_phone_number)
     return chat
+
 
 @mcp.tool()
 def get_contact_chats(jid: str, limit: int = 20, page: int = 0) -> list[dict[str, Any]]:
@@ -174,6 +177,7 @@ def get_contact_chats(jid: str, limit: int = 20, page: int = 0) -> list[dict[str
     chats = whatsapp_get_contact_chats(jid, limit, page)
     return chats
 
+
 @mcp.tool()
 def get_last_interaction(jid: str) -> str:
     """Get most recent WhatsApp message involving the contact.
@@ -184,12 +188,9 @@ def get_last_interaction(jid: str) -> str:
     message = whatsapp_get_last_interaction(jid)
     return message
 
+
 @mcp.tool()
-def get_message_context(
-    message_id: str,
-    before: int = 5,
-    after: int = 5
-) -> dict[str, Any]:
+def get_message_context(message_id: str, before: int = 5, after: int = 5) -> dict[str, Any]:
     """Get context around a specific WhatsApp message.
 
     Args:
@@ -205,6 +206,7 @@ def get_message_context(
     context = whatsapp_get_message_context(message_id, before, after)
     return context
 
+
 @mcp.tool()
 def send_message(recipient: str, message: str) -> dict[str, Any]:
     """Send a WhatsApp message to a person or group. For group chats use the JID.
@@ -218,6 +220,7 @@ def send_message(recipient: str, message: str) -> dict[str, Any]:
         A dictionary containing success status and a status message
     """
     return whatsapp_send_message(recipient, message)
+
 
 @mcp.tool()
 def send_file(recipient: str, media_path: str) -> dict[str, Any]:
@@ -233,6 +236,7 @@ def send_file(recipient: str, media_path: str) -> dict[str, Any]:
     """
     return whatsapp_send_file(recipient, media_path)
 
+
 @mcp.tool()
 def send_audio_message(recipient: str, media_path: str) -> dict[str, Any]:
     """Send any audio file as a WhatsApp audio message to the specified recipient. For group messages use the JID. If it errors due to ffmpeg not being installed, use send_file instead.
@@ -246,6 +250,7 @@ def send_audio_message(recipient: str, media_path: str) -> dict[str, Any]:
         A dictionary containing success status and a status message
     """
     return whatsapp_audio_voice_message(recipient, media_path)
+
 
 @mcp.tool()
 def download_media(message_id: str, chat_jid: str) -> dict[str, Any]:
@@ -270,6 +275,7 @@ def download_media(message_id: str, chat_jid: str) -> dict[str, Any]:
     else:
         return {"success": False, "message": "Failed to download media"}
 
+
 @mcp.tool()
 def get_contact_details(identifier: str) -> dict[str, Any] | None:
     """Get detailed information about a WhatsApp contact.
@@ -286,6 +292,7 @@ def get_contact_details(identifier: str) -> dict[str, Any] | None:
         contact = whatsapp_get_contact_by_phone(identifier)
     return contact
 
+
 @mcp.tool()
 def list_all_contacts(limit: int = 100) -> list[dict[str, Any]]:
     """List all WhatsApp contacts with their information.
@@ -297,6 +304,7 @@ def list_all_contacts(limit: int = 100) -> list[dict[str, Any]]:
         List of contact dicts with jid, phone_number, name, first_name, full_name, push_name, business_name, nickname
     """
     return whatsapp_list_all_contacts(limit)
+
 
 @mcp.tool()
 def set_nickname(jid: str, nickname: str) -> dict[str, Any]:
@@ -311,6 +319,7 @@ def set_nickname(jid: str, nickname: str) -> dict[str, Any]:
     """
     return whatsapp_set_contact_nickname(jid, nickname)
 
+
 @mcp.tool()
 def get_nickname(jid: str) -> str:
     """Get the custom nickname for a WhatsApp contact.
@@ -322,6 +331,7 @@ def get_nickname(jid: str) -> str:
     if nickname:
         return f"Nickname for {jid}: {nickname}"
     return f"No nickname set for {jid}"
+
 
 @mcp.tool()
 def remove_nickname(jid: str) -> dict[str, Any]:
@@ -335,6 +345,7 @@ def remove_nickname(jid: str) -> dict[str, Any]:
     """
     return whatsapp_remove_contact_nickname(jid)
 
+
 @mcp.tool()
 def list_nicknames() -> list[dict[str, Any]]:
     """List all custom contact nicknames.
@@ -346,6 +357,7 @@ def list_nicknames() -> list[dict[str, Any]]:
 
 
 # Phase 1 Features: Reactions, Edit, Delete, Group Info, Mark Read
+
 
 @mcp.tool()
 def send_reaction(chat_jid: str, message_id: str, emoji: str) -> dict[str, Any]:
@@ -421,6 +433,7 @@ def mark_read(chat_jid: str, message_ids: list[str], sender_jid: str | None = No
 
 
 # Phase 2: Group Management
+
 
 @mcp.tool()
 def create_group(name: str, participants: list[str]) -> dict[str, Any]:
@@ -522,13 +535,9 @@ def update_group(group_jid: str, name: str | None = None, topic: str | None = No
 
 # Phase 3: Polls
 
+
 @mcp.tool()
-def create_poll(
-    chat_jid: str,
-    question: str,
-    options: list[str],
-    multi_select: bool = False
-) -> dict[str, Any]:
+def create_poll(chat_jid: str, question: str, options: list[str], multi_select: bool = False) -> dict[str, Any]:
     """Create and send a poll to a WhatsApp chat.
 
     Args:
@@ -545,13 +554,10 @@ def create_poll(
 
 # Phase 4: History Sync
 
+
 @mcp.tool()
 def request_history(
-    chat_jid: str,
-    oldest_msg_id: str,
-    oldest_msg_timestamp: int,
-    oldest_msg_from_me: bool = False,
-    count: int = 50
+    chat_jid: str, oldest_msg_id: str, oldest_msg_timestamp: int, oldest_msg_from_me: bool = False, count: int = 50
 ) -> dict[str, Any]:
     """Request older messages for a chat (on-demand history sync).
 
@@ -574,12 +580,11 @@ def request_history(
         - After requesting, wait a few seconds then use `list_messages` to see synced messages
         - Use when `list_messages` returns fewer messages than expected
     """
-    return whatsapp_request_chat_history(
-        chat_jid, oldest_msg_id, oldest_msg_timestamp, oldest_msg_from_me, count
-    )
+    return whatsapp_request_chat_history(chat_jid, oldest_msg_id, oldest_msg_timestamp, oldest_msg_from_me, count)
 
 
 # Phase 5: Advanced Features
+
 
 @mcp.tool()
 def set_presence(presence: str) -> dict[str, Any]:
@@ -702,4 +707,4 @@ def create_newsletter(name: str, description: str = "") -> dict[str, Any]:
 
 if __name__ == "__main__":
     # Run with stdio transport for Claude Code CLI
-    mcp.run(transport='stdio')
+    mcp.run(transport="stdio")

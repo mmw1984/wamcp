@@ -2,18 +2,16 @@
 
 Thanks for your interest in contributing!
 
-## Quick Start
+## Quick Start (non-Docker)
+
+This repo is developed and run with **`wamcp`** (see README). After cloning:
 
 ```bash
-# Clone
-git clone https://github.com/felixisaac/whatsapp-mcp-extended
-cd whatsapp-mcp-extended
-
-# Start services
-docker-compose up -d
-
-# Watch logs for QR code
-docker-compose logs -f whatsapp-bridge
+export PATH="$HOME/.local/bin:$PATH"
+wamcp doctor
+wamcp install
+wamcp start
+wamcp login qr
 ```
 
 ## Development Setup
@@ -76,7 +74,7 @@ python3 -m http.server 8089
 - Check existing issues first
 - Include steps to reproduce
 - Include error logs if applicable
-- Specify your environment (OS, Docker version, etc.)
+- Specify your environment (OS, `wamcp` / git ref, etc.)
 
 ## Architecture
 

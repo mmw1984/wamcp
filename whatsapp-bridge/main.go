@@ -116,14 +116,14 @@ func main() {
 		}
 	})
 
-	// Connection watchdog: exit process if disconnected >3 min (forces container restart)
+	// Connection watchdog: exit process if disconnected >3 min (lets supervisor restart)
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
 			_, _, discAt, _ := client.ConnectionState()
 			if !discAt.IsZero() && time.Since(discAt) > 3*time.Minute {
-				logger.Errorf("WATCHDOG: disconnected for %v, exiting to force container restart", time.Since(discAt).Round(time.Second))
+				logger.Errorf("WATCHDOG: disconnected for %v, exiting to allow restart", time.Since(discAt).Round(time.Second))
 				os.Exit(1)
 			}
 		}

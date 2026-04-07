@@ -2,9 +2,9 @@
 
 ## Project Context
 
-- **Base**: `whatsapp-mcp-extended` (Dockerized, with webhooks)
+- **Base**: `whatsapp-mcp-extended` (non-Docker via `wamcp`, webhooks)
 - **Core library**: whatsmeow (Go) - WhatsApp Web multi-device API
-- **Status**: Docker support ✅, Webhooks ✅, Contact management ✅
+- **Status**: `wamcp` installer ✅, Webhooks ✅, Contact management ✅
 
 ## Current State
 
@@ -60,7 +60,7 @@
 | `remove_nickname` | ❌ | ✅ |
 | `list_nicknames` | ❌ | ✅ |
 | **Infrastructure** | | |
-| Docker support | ❌ | ✅ |
+| `wamcp` / non-Docker install | ❌ | ✅ |
 | Webhook system | ❌ | ✅ |
 | Gradio UI | ❌ | ✅ |
 | **Phase 1 Features** | | |
@@ -290,7 +290,7 @@ ALTER TABLE messages ADD COLUMN quoted_message_id TEXT;
 
 ## Completed Features ✅
 
-- [x] Docker support (docker-compose)
+- [x] Non-Docker install (`wamcp` + optional prebuilt Linux bridge)
 - [x] Webhook system with triggers
 - [x] Contact nickname management
 - [x] Webhook management UI
@@ -336,13 +336,13 @@ ALTER TABLE messages ADD COLUMN quoted_message_id TEXT;
   - [x] Path traversal protection for media files
 - [x] **P1 Security Fixes**:
   - [x] Rate limiting middleware
-  - [x] Non-root Docker containers
+  - [x] Least-privilege deployment guidance (`wamcp` / local user)
   - [x] Security headers (X-Content-Type-Options, X-Frame-Options, etc.)
   - [x] Structured audit logging
 - [x] **Code Quality**:
   - [x] Python code modularization (lib/models.py, lib/database.py, lib/bridge.py, lib/utils.py)
   - [x] Removed debug print statements
-  - [x] CI/CD GitHub Actions workflows (Go tests, Python lint, Docker build)
+  - [x] CI/CD GitHub Actions workflows (Go tests, Python lint)
 - [x] **Issue #144**: `sender_name` field added to message output for AI agent readability
 
 ---

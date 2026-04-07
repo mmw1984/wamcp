@@ -16,7 +16,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: whatsapp-bridge/go.mod
+          cache-dependency-path: whatsapp-bridge/go.sum
 
       - name: Run govulncheck
         working-directory: whatsapp-bridge
@@ -42,19 +43,6 @@ jobs:
         working-directory: whatsapp-mcp-server
         run: |
           pip-audit -r requirements.txt || true
-
-  docker-security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Trivy on Dockerfiles
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'config'
-          scan-ref: '.'
-          format: 'table'
-          exit-code: '0'  # Don't fail, just report
 
   secrets-scan:
     runs-on: ubuntu-latest

@@ -20,9 +20,7 @@ What should happen.
 What actually happens.
 
 ## Environment
-- OS:
-- Docker version:
-- Running via: [Docker / Manual]
+- OS / `wamcp` version or git ref:
 
 ## Logs
 ```
