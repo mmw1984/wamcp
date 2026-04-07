@@ -66,10 +66,10 @@ Stop:
   - Installs dependencies
   - Creates local runtime state dir (`.wamcp/`)
   - Generates API key env file for bridge auth
-- `wamcp up [--sse]`
+- `wamcp up`
   - Starts bridge in background
   - Waits for bridge health endpoint
-  - Starts MCP server in SSE mode (`sse-main.py`)
+  - Starts MCP server in Streamable HTTP mode (`streamablehttp-main.py`)
 - `wamcp login phone <number>`
   - Calls bridge `POST /api/pair`
   - Polls `GET /api/pairing` for completion
@@ -88,7 +88,7 @@ Stop:
 
 ## MCP Integration (stdio)
 
-`wamcp up` runs SSE mode for network access.  
+`wamcp up` runs Streamable HTTP mode for network access.  
 For Cursor/Claude MCP over stdio, use:
 
 ```bash

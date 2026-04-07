@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bas
 ### Ports
 
 - **Bridge API**: `127.0.0.1:8080`
-- **MCP SSE**: `127.0.0.1:8081` (SSE endpoint: `/sse`)
+- **MCP Streamable HTTP**: `127.0.0.1:8081` (HTTP endpoint: `/mcp`)
 
 ### Start with different ports (avoid port conflicts)
 
@@ -136,7 +136,7 @@ export PATH="$HOME/.local/bin:$PATH"
 `wamcp` uses:
 
 - Bridge: `127.0.0.1:8080`
-- MCP SSE: `127.0.0.1:8081`
+- MCP Streamable HTTP: `127.0.0.1:8081`
 
 Check what is using the ports:
 
@@ -166,7 +166,7 @@ wamcp start --force
 
 ## Poke integration (optional)
 
-Forward your local MCP SSE server to Poke and receive notifications when new WhatsApp messages arrive.
+Forward your local MCP server (Streamable HTTP) to Poke and receive notifications when new WhatsApp messages arrive.
 
 **Requirements:** Node.js 18+, `npx`, and `npm`. The first `wamcp poke setup` or `wamcp poke watch` runs `npm install poke` once under your wamcp state directory (default: `<repo>/.wamcp/poke/`, or `$WAMCP_HOME/poke/` if set) so the ESM watcher can import the SDK reliably.
 
@@ -177,7 +177,8 @@ wamcp start
 wamcp poke setup
 ```
 
-`wamcp poke setup` runs the tunnel **in the background** (same as `poke tunnel http://localhost:8081/sse -n wamcp`); the colourful CLI text is in **`wamcp poke logs tunnel`**, not in your terminal.
+`wamcp poke setup` runs the tunnel **in the background** on `http://localhost:8081/mcp`.
+The colourful CLI text is in **`wamcp poke logs tunnel`**, not in your terminal.
 
 ### Start watcher (background)
 

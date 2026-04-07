@@ -48,8 +48,8 @@ wamcp - WhatsApp MCP non-docker helper
 
 Usage:
   wamcp install
-  wamcp up [--sse] [--force]
-  wamcp start [--sse] [--force]
+  wamcp up [--force]
+  wamcp start [--force]
   wamcp login phone <number>
   wamcp login qr
   wamcp status
@@ -65,7 +65,7 @@ Usage:
   wamcp self uninstall
 
 Notes:
-  - Default mode is bridge + mcp-sse.
+  - Default mode is bridge + MCP streamable HTTP (`/mcp`).
   - For Cursor/Claude stdio MCP, use "wamcp mcp-config".
 EOF
 }
@@ -123,6 +123,7 @@ API_PORT=${BRIDGE_PORT}
 BRIDGE_HOST=127.0.0.1:${BRIDGE_PORT}
 HOST=127.0.0.1
 PORT=${MCP_PORT}
+MCP_TRANSPORT=streamable-http
 GRADIO=false
 GRADIO_PORT=8082
 DISABLE_AUTH_CHECK=false
@@ -184,7 +185,7 @@ install_deps() {
   require_cmd sqlite3
   require_cmd uv
 
-  print_info "Syncing Python dependencies (with extras for SSE/Gradio)..."
+  print_info "Syncing Python dependencies (with extras for streamable HTTP / Gradio)..."
   (
     cd "${ROOT_DIR}/whatsapp-mcp-server" \
       && uv sync --all-extras
@@ -412,9 +413,10 @@ start_bridge() {
   )
 }
 
-start_mcp_sse() {
+start_mcp() {
   local pid
-  local force="${1:-false}"
+  local transport="${1:-streamable-http}"
+  local force="${2:-false}"
   pid="$(read_pid "${MCP_PID_FILE}")"
   if is_running "${pid}"; then
     print_info "MCP already running (pid ${pid})"
@@ -423,18 +425,29 @@ start_mcp_sse() {
 
   ensure_port_free_or_self "${MCP_PORT}" "${MCP_PID_FILE}" "mcp" "${force}"
   load_env
-  print_info "Starting MCP SSE on :${PORT:-$MCP_PORT} ..."
+  print_info "Starting MCP ${transport} on :${PORT:-$MCP_PORT} ..."
+  local mcp_transport_path="/mcp"
   (
     cd "${ROOT_DIR}/whatsapp-mcp-server"
+    if [[ "${transport}" != "streamable-http" && "${transport}" != "streamable_http" && "${transport}" != "streamablehttp" ]]; then
+      print_error "Unknown MCP transport: ${transport}"
+      print_error "Use --force only for startup control; MCP transport is fixed to streamable HTTP."
+      exit 1
+    fi
+    main_script="streamablehttp-main.py"
+    transport_name="streamable HTTP"
+    print_info "Starting MCP ${transport_name} transport via ${main_script}"
     nohup env \
       BRIDGE_HOST="${BRIDGE_HOST}" \
       API_KEY="${API_KEY}" \
       HOST="${HOST}" \
       PORT="${PORT:-$MCP_PORT}" \
       GRADIO=false \
-      uv run python sse-main.py >> "${MCP_LOG_FILE}" 2>&1 &
+      uv run python "${main_script}" >> "${MCP_LOG_FILE}" 2>&1 &
     echo $! > "${MCP_PID_FILE}"
   )
+  printf "MCP_TRANSPORT=%s\n" "${transport}" >> "${ENV_FILE}"
+  printf "MCP_TRANSPORT_PATH=%s\n" "${mcp_transport_path}" >> "${ENV_FILE}"
 }
 
 wait_bridge_health() {
@@ -461,14 +474,12 @@ wait_bridge_health() {
 }
 
 do_up() {
-  local mode="${1:-sse}"
+  local mode="${1:-streamable-http}"
   local force="${2:-false}"
   start_bridge "${force}"
   wait_bridge_health
 
-  if [[ "${mode}" == "sse" ]]; then
-    start_mcp_sse "${force}"
-  fi
+  start_mcp "${mode}" "${force}"
 
   print_info "Services started."
   print_info "Use 'wamcp status' to verify connection state."
@@ -805,8 +816,8 @@ poke_setup_cmd() {
   fi
 
   print_info "Starting Poke tunnel in background..."
-  # Match foreground UX: same URL style as `poke tunnel http://localhost:8081/sse -n wamcp`
-  local url="http://localhost:${MCP_PORT}/sse"
+  # Match foreground UX: same URL style as `poke tunnel ... -n wamcp`
+  local url="http://localhost:${MCP_PORT}/mcp"
   if command -v poke >/dev/null 2>&1; then
     nohup poke tunnel "${url}" -n wamcp >> "${POKE_TUNNEL_LOG_FILE}" 2>&1 &
   else
@@ -907,13 +918,8 @@ main() {
     up|start)
       shift || true
       local force="false"
-      local mode="sse"
       while [[ $# -gt 0 ]]; do
         case "${1}" in
-          --sse)
-            mode="sse"
-            shift
-            ;;
           --force)
             force="true"
             shift
@@ -924,7 +930,7 @@ main() {
             ;;
         esac
       done
-      do_up "${mode}" "${force}"
+      do_up "streamable-http" "${force}"
       ;;
     login)
       local method="${2:-}"

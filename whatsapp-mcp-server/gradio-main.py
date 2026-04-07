@@ -913,10 +913,10 @@ if __name__ == "__main__":
         import threading
 
         def start_mcp_server():
-            logging.info(f"Starting WhatsApp MCP server with SSE transport on {host}:{port}")
+            logging.info(f"Starting WhatsApp MCP server with Streamable HTTP transport on {host}:{port}")
             try:
-                # Initialize and run the server with SSE transport
-                mcp.run(transport="sse")
+                # Initialize and run the server with Streamable HTTP transport
+                mcp.run(transport="streamable-http")
             except Exception as e:
                 logging.error(f"Error starting MCP server: {e}")
                 import traceback
@@ -934,13 +934,13 @@ if __name__ == "__main__":
         app.launch(server_name=host, server_port=gradio_port, share=False, mcp_server=True)
     else:
         # Run MCP server only (no Gradio UI)
-        logging.info(f"Starting WhatsApp MCP server (API only) with SSE transport on {host}:{port}")
+        logging.info(f"Starting WhatsApp MCP server (API only) with Streamable HTTP transport on {host}:{port}")
         logging.info("Gradio UI disabled via GRADIO environment variable")
         try:
             mcp.settings.host = host
             mcp.settings.port = port
-            # Initialize and run the server with SSE transport
-            mcp.run(transport="sse")
+            # Initialize and run the server with Streamable HTTP transport
+            mcp.run(transport="streamable-http")
         except Exception as e:
             logging.error(f"Error starting MCP server: {e}")
             import traceback

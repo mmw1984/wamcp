@@ -23,7 +23,7 @@ WhatsApp MCP — Model Context Protocol integration with personal WhatsApp accou
 ```
 
 **whatsapp-bridge/** (Go): WhatsApp connection via whatsmeow, REST API, webhooks  
-**whatsapp-mcp-server/** (Python): MCP tools, stdio or SSE transport  
+**whatsapp-mcp-server/** (Python): MCP tools, stdio or streamable HTTP transport  
 **whatsapp-webhook-ui/**: Optional browser UI for webhook configuration  
 
 ## Commands (recommended: `wamcp`)
@@ -83,8 +83,8 @@ go mod tidy
 ### Python MCP
 - `whatsapp.py` — Core library and bridge HTTP client
 - `main.py` — MCP stdio (Cursor / Claude Desktop)
-- `sse-main.py` — MCP SSE without Gradio
-- `gradio-main.py` — SSE + Gradio UI (optional)
+- `streamablehttp-main.py` — MCP Streamable HTTP without Gradio
+- `gradio-main.py` — Streamable HTTP + Gradio UI (optional)
 - `BRIDGE_HOST` — Where to reach the Go bridge (e.g. `127.0.0.1:8080`)
 
 ### Webhooks
@@ -98,7 +98,7 @@ Delivery: async with backoff, HMAC-SHA256 signatures
 
 ## Ports
 - 8080: Bridge REST API  
-- 8081: MCP SSE (when using `sse-main.py` / Gradio SSE path)  
+- 8081: MCP Streamable HTTP (`/mcp`)  
 - 8082: Gradio UI (if enabled)  
 - 8089: Webhook UI (static server)  
 
