@@ -169,8 +169,8 @@ EOF
   print "Installed: ${INSTALL_BIN_DIR}/wamcp"
   print "Next:"
   print "  wamcp doctor"
-  print "  wamcp install"
-  print "  wamcp up"
+  print "  wamcp install   # Python deps + bridge (Linux tries prebuilt binary from GitHub Releases)"
+  print "  wamcp start"
 }
 
 main "$@"

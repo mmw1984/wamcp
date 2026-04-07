@@ -65,7 +65,7 @@ If you want the port change to be permanent, edit the env file and restart:
 ```bash
 vim ~/.wamcp-src/current/.wamcp/env
 wamcp stop
-wamcp up
+wamcp start
 ```
 
 ### What runs (minimum required)
@@ -97,7 +97,7 @@ rm -rf ~/.wamcp       # optional: remove runtime state
 curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
 wamcp install
-wamcp up
+wamcp start
 wamcp login qr
 ```
 
@@ -107,7 +107,7 @@ wamcp login qr
 curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
 wamcp install
-wamcp up
+wamcp start
 wamcp login qr
 ```
 
@@ -117,7 +117,7 @@ wamcp login qr
 curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
 wamcp install
-wamcp up
+wamcp start
 wamcp login qr
 ```
 

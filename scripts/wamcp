@@ -197,6 +197,9 @@ for m in ("mcp", "requests", "uvicorn", "starlette"):
 print("ok")
 PY
   ) >/dev/null
+  load_env
+  print_info "Preparing WhatsApp bridge binary (Linux: downloads prebuilt release asset when available)..."
+  ensure_bridge_binary
   print_info "Install completed."
 }
 
