@@ -1,73 +1,15 @@
-# WhatsApp MCP Extended
+## WhatsApp MCP Extended (41 tools) + `wamcp` one-line installer
 
-An extended Model Context Protocol (MCP) server for WhatsApp with **41 tools** - advanced messaging, group management, webhooks, presence, and more.
+Run a local WhatsApp MCP server (non-Docker) with **reactions**, **edit/delete**, **groups**, **polls**, **presence**, **newsletters**, **webhooks**, and more.
 
-> Built on [AdamRussak/whatsapp-mcp](https://github.com/AdamRussak/whatsapp-mcp) (webhooks, containers) which forked [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp) (original). Extended with reactions, message editing, polls, group management, presence, newsletters, and more.
-
-## Attribution
-
-This repository includes and builds upon the upstream project [`FelixIsaac/whatsapp-mcp-extended`](https://github.com/FelixIsaac/whatsapp-mcp-extended) and its fork chain.
-
-![WhatsApp MCP](./example-use.png)
-
-## What's New (vs Original)
-
-| Feature | Original | Extended |
-|---------|----------|----------|
-| MCP Tools | 12 | **41** |
-| Reactions | - | ✅ |
-| Edit/Delete Messages | - | ✅ |
-| Group Management | - | ✅ |
-| Polls | - | ✅ |
-| History Sync | - | ✅ |
-| Presence/Online Status | - | ✅ |
-| Newsletters | - | ✅ |
-| Webhooks | - | ✅ |
-| Custom Nicknames | - | ✅ |
-
-## Architecture
-
-```
-┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
-│   whatsapp-bridge   │     │   whatsapp-mcp      │     │    webhook-ui       │
-│   (Go + whatsmeow)  │◄────│   (Python + MCP)    │     │   (HTML/JS SPA)     │
-│   Port: 8080        │     │   Ports: 8081,8082  │     │   Port: 8089        │
-└─────────────────────┘     └─────────────────────┘     └─────────────────────┘
-         │                           │
-         ▼                           ▼
-    ┌─────────────────────────────────────┐
-    │           SQLite (store/)           │
-    │  messages.db │ whatsapp.db          │
-    └─────────────────────────────────────┘
-```
-
-## Quick Start
-
-### Public Install (global `wamcp`)
-
-Install `wamcp` as a global command into `~/.local/bin/wamcp`:
+### Install (macOS / Ubuntu)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Pin a version/tag:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash -s -- --ref vX.Y.Z
-```
-
-Uninstall:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash -s -- --uninstall
-rm -rf ~/.wamcp-src   # optional: remove downloaded source
-rm -rf ~/.wamcp       # optional: remove runtime state
-rm -rf ./store        # optional: remove local DBs if you ran from a repo checkout
-```
-
-Then run:
+### Start
 
 ```bash
 wamcp doctor
@@ -76,53 +18,184 @@ wamcp up
 wamcp login qr   # or: wamcp login phone <countrycode+number>
 ```
 
-### Non-Docker (`wamcp`, macOS + Ubuntu)
+### Stop / Restart / Logs
 
 ```bash
-# from repo root
-chmod +x scripts/wamcp
-./scripts/wamcp install
-./scripts/wamcp up
-
-# login (choose one)
-./scripts/wamcp login phone <countrycode+number>
-./scripts/wamcp login qr
+wamcp stop
+wamcp up
+wamcp logs
 ```
 
-`wamcp` starts the minimum recommended runtime: `whatsapp-bridge + whatsapp-mcp` (SSE mode, no webhook UI).
+### Update / Upgrade
 
-For Cursor/Claude stdio MCP config, run:
+Re-run the installer (it updates `~/.wamcp-src/<ref>` and repoints `~/.wamcp-src/current`):
 
 ```bash
-./scripts/wamcp mcp-config
+curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash
 ```
 
-### Docker (Recommended)
+Pin / switch version:
 
 ```bash
-git clone https://github.com/felixisaac/whatsapp-mcp-extended
-cd whatsapp-mcp-extended
-
-docker network create n8n_n8n_traefik_network
-docker-compose up -d
-
-# Scan QR code to authenticate
-docker-compose logs -f whatsapp-bridge
+curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash -s -- --ref vX.Y.Z
 ```
 
-### Claude Desktop / Cursor Integration
+### Ports
 
-Add to your MCP config (`claude_desktop_config.json` or Cursor settings):
+- **Bridge API**: `127.0.0.1:8080`
+- **MCP SSE**: `127.0.0.1:8081` (SSE endpoint: `/sse`)
 
-```json
-{
-  "mcpServers": {
-    "whatsapp": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/whatsapp-mcp-extended/whatsapp-mcp-server", "python", "main.py"]
-    }
-  }
-}
+### Start with different ports (avoid port conflicts)
+
+If 8080/8081 are already used, you can start with different ports:
+
+```bash
+wamcp stop
+BRIDGE_PORT=8180 MCP_PORT=8181 wamcp up
+```
+
+If you also use stdio MCP config, regenerate after changing ports:
+
+```bash
+BRIDGE_PORT=8180 wamcp mcp-config
+```
+
+If you want the port change to be permanent, edit the env file and restart:
+
+```bash
+vim ~/.wamcp-src/current/.wamcp/env
+wamcp stop
+wamcp up
+```
+
+### What runs (minimum required)
+
+- **`whatsapp-bridge` (Go)**: connects to WhatsApp (QR/phone pairing) + exposes REST API
+- **`whatsapp-mcp-server` (Python)**: exposes MCP tools and calls the bridge API
+
+`webhook-ui` is optional (only needed if you want to manage webhook rules from a browser).
+
+### Cursor / Claude Desktop MCP config (stdio)
+
+Run this and paste the JSON:
+
+```bash
+wamcp mcp-config
+```
+
+### Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash -s -- --uninstall
+rm -rf ~/.wamcp-src   # optional: remove downloaded source
+rm -rf ~/.wamcp       # optional: remove runtime state
+```
+
+### 廣東話 Quickstart
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
+wamcp install
+wamcp up
+wamcp login qr
+```
+
+### 繁體中文（Quickstart）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
+wamcp install
+wamcp up
+wamcp login qr
+```
+
+### 简体中文（Quickstart）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
+wamcp install
+wamcp up
+wamcp login qr
+```
+
+## Troubleshooting
+
+### `wamcp` command not found
+
+- Ensure `~/.local/bin` is on PATH:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### Ports already in use (8080/8081)
+
+`wamcp` uses:
+
+- Bridge: `127.0.0.1:8080`
+- MCP SSE: `127.0.0.1:8081`
+
+Check what is using the ports:
+
+```bash
+lsof -nP -iTCP:8080 -sTCP:LISTEN
+lsof -nP -iTCP:8081 -sTCP:LISTEN
+```
+
+Stop `wamcp` services (recommended):
+
+```bash
+wamcp stop
+```
+
+If you must kill a stuck process, use the PID from `lsof`:
+
+```bash
+kill <PID>
+kill -9 <PID>   # only if it refuses to stop
+```
+
+### Bridge/MCP started but not working
+
+Check status + logs:
+
+```bash
+wamcp status
+wamcp logs bridge
+wamcp logs mcp
+```
+
+Hard reset local runtime state (will require login again):
+
+```bash
+wamcp stop
+rm -rf ~/.wamcp
+```
+
+### WhatsApp login / QR issues
+
+- Re-run:
+
+```bash
+wamcp login qr
+wamcp logs bridge
+```
+
+If you see a timeout waiting for QR scan, just run `wamcp login qr` again and scan the latest QR.
+
+### `Client outdated (405)` errors
+
+WhatsApp Web protocol changes. Update the Go dependency and restart:
+
+```bash
+cd ~/.wamcp-src/current/whatsapp-bridge
+go get -u go.mau.fi/whatsmeow@latest
+go mod tidy
+wamcp stop
+wamcp up
 ```
 
 ## MCP Tools (41 Total)
@@ -269,7 +342,7 @@ docker-compose logs -f whatsapp-bridge
 **Fork chain:**
 - [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp) - Original MCP server (12 tools)
 - [AdamRussak/whatsapp-mcp](https://github.com/AdamRussak/whatsapp-mcp) - Added webhooks, container split, webhook UI
-- This repo - Added reactions, edit/delete, groups, polls, presence, newsletters (41 tools)
+- Upstream base: [`FelixIsaac/whatsapp-mcp-extended`](https://github.com/FelixIsaac/whatsapp-mcp-extended)
 
 **Libraries:**
 - [whatsmeow](https://github.com/tulir/whatsmeow) - Go WhatsApp Web API

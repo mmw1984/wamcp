@@ -40,7 +40,8 @@ wamcp - WhatsApp MCP non-docker helper
 
 Usage:
   wamcp install
-  wamcp up [--sse]
+  wamcp up [--sse] [--force]
+  wamcp start [--sse] [--force]
   wamcp login phone <number>
   wamcp login qr
   wamcp status
@@ -206,10 +207,40 @@ port_in_use() {
   return 1
 }
 
+port_listen_pids() {
+  local port="$1"
+  if ! command -v lsof >/dev/null 2>&1; then
+    return 0
+  fi
+  # List PIDs listening on port
+  lsof -nP -t -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null | sort -u || true
+}
+
+kill_pids() {
+  local pids=("$@")
+  local pid
+  for pid in "${pids[@]}"; do
+    [[ -z "${pid}" ]] && continue
+    if kill -0 "${pid}" >/dev/null 2>&1; then
+      print_warn "Killing PID ${pid} (port conflict)"
+      kill "${pid}" >/dev/null 2>&1 || true
+    fi
+  done
+  sleep 1
+  for pid in "${pids[@]}"; do
+    [[ -z "${pid}" ]] && continue
+    if kill -0 "${pid}" >/dev/null 2>&1; then
+      print_warn "Force killing PID ${pid}"
+      kill -9 "${pid}" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 ensure_port_free_or_self() {
   local port="$1"
   local pid_file="$2"
   local name="$3"
+  local force="${4:-false}"
   local pid
   pid="$(read_pid "${pid_file}")"
 
@@ -221,8 +252,24 @@ ensure_port_free_or_self() {
     return
   fi
 
+  if [[ "${force}" == "true" ]]; then
+    mapfile -t pids < <(port_listen_pids "${port}")
+    if [[ "${#pids[@]}" -eq 0 ]]; then
+      print_error "Port ${port} is in use but could not identify PID(s)."
+      exit 1
+    fi
+    print_warn "Port ${port} is already in use. --force enabled; attempting to free port."
+    kill_pids "${pids[@]}"
+    if port_in_use "${port}"; then
+      print_error "Failed to free port ${port}."
+      exit 1
+    fi
+    return
+  fi
+
   print_error "Port ${port} is already in use. ${name} cannot start."
   print_error "Run: wamcp stop"
+  print_error "Or:  wamcp start --force"
   exit 1
 }
 
@@ -233,13 +280,14 @@ build_bridge_binary() {
 
 start_bridge() {
   local pid
+  local force="${1:-false}"
   pid="$(read_pid "${BRIDGE_PID_FILE}")"
   if is_running "${pid}"; then
     print_info "Bridge already running (pid ${pid})"
     return
   fi
 
-  ensure_port_free_or_self "${BRIDGE_PORT}" "${BRIDGE_PID_FILE}" "bridge"
+  ensure_port_free_or_self "${BRIDGE_PORT}" "${BRIDGE_PID_FILE}" "bridge" "${force}"
   load_env
   build_bridge_binary
   print_info "Starting bridge on :${API_PORT:-$BRIDGE_PORT} ..."
@@ -255,13 +303,14 @@ start_bridge() {
 
 start_mcp_sse() {
   local pid
+  local force="${1:-false}"
   pid="$(read_pid "${MCP_PID_FILE}")"
   if is_running "${pid}"; then
     print_info "MCP already running (pid ${pid})"
     return
   fi
 
-  ensure_port_free_or_self "${MCP_PORT}" "${MCP_PID_FILE}" "mcp"
+  ensure_port_free_or_self "${MCP_PORT}" "${MCP_PID_FILE}" "mcp" "${force}"
   load_env
   print_info "Starting MCP SSE on :${PORT:-$MCP_PORT} ..."
   (
@@ -296,11 +345,12 @@ wait_bridge_health() {
 
 do_up() {
   local mode="${1:-sse}"
-  start_bridge
+  local force="${2:-false}"
+  start_bridge "${force}"
   wait_bridge_health
 
   if [[ "${mode}" == "sse" ]]; then
-    start_mcp_sse
+    start_mcp_sse "${force}"
   fi
 
   print_info "Services started."
@@ -501,14 +551,27 @@ main() {
     install)
       install_deps
       ;;
-    up)
+    up|start)
       shift || true
-      if [[ "${1:-}" == "--sse" || -z "${1:-}" ]]; then
-        do_up "sse"
-      else
-        print_error "Unknown up flag: ${1}"
-        exit 1
-      fi
+      local force="false"
+      local mode="sse"
+      while [[ $# -gt 0 ]]; do
+        case "${1}" in
+          --sse)
+            mode="sse"
+            shift
+            ;;
+          --force)
+            force="true"
+            shift
+            ;;
+          *)
+            print_error "Unknown flag: ${1}"
+            exit 1
+            ;;
+        esac
+      done
+      do_up "${mode}" "${force}"
       ;;
     login)
       local method="${2:-}"
