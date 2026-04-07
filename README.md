@@ -48,19 +48,32 @@ This repository includes and builds upon the upstream project [`FelixIsaac/whats
 Install `wamcp` as a global command into `~/.local/bin/wamcp`:
 
 ```bash
-curl -fsSL <install_url> | bash
+curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Pin a version/tag:
 
 ```bash
-curl -fsSL <install_url> | bash -s -- --ref vX.Y.Z
+curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash -s -- --ref vX.Y.Z
 ```
 
 Uninstall:
 
 ```bash
-curl -fsSL <install_url> | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash -s -- --uninstall
+rm -rf ~/.wamcp-src   # optional: remove downloaded source
+rm -rf ~/.wamcp       # optional: remove runtime state
+rm -rf ./store        # optional: remove local DBs if you ran from a repo checkout
+```
+
+Then run:
+
+```bash
+wamcp doctor
+wamcp install
+wamcp up
+wamcp login qr   # or: wamcp login phone <countrycode+number>
 ```
 
 ### Non-Docker (`wamcp`, macOS + Ubuntu)
