@@ -5,7 +5,7 @@ set -euo pipefail
 # Installs:
 # - source checkout into ~/.wamcp-src/<ref>
 # - symlink ~/.wamcp-src/current -> that checkout
-# - shim ~/.local/bin/wamcp -> ~/.wamcp-src/current/scripts/wamcp
+# - wrapper ~/.local/bin/wamcp that sets WAMCP_ROOT and runs scripts/wamcp
 #
 # Usage:
 #   curl -fsSL <url-to-install.sh> | bash
@@ -151,7 +151,18 @@ main() {
 
   ln -sfn "${target_dir}" "${SRC_BASE_DIR}/current"
   chmod +x "${SRC_BASE_DIR}/current/scripts/wamcp"
-  ln -sfn "${SRC_BASE_DIR}/current/scripts/wamcp" "${INSTALL_BIN_DIR}/wamcp"
+
+  # Install wrapper so global `wamcp` can locate the repo root reliably.
+  cat > "${INSTALL_BIN_DIR}/wamcp" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+WAMCP_ROOT_DEFAULT="${HOME}/.wamcp-src/current"
+export WAMCP_ROOT="${WAMCP_ROOT:-$WAMCP_ROOT_DEFAULT}"
+
+exec "${WAMCP_ROOT}/scripts/wamcp" "$@"
+EOF
+  chmod +x "${INSTALL_BIN_DIR}/wamcp"
 
   ensure_path_hint
 
