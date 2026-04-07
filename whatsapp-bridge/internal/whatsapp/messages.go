@@ -268,7 +268,7 @@ func (c *Client) SendReaction(chatJID, messageID, emoji string) error {
 	msgID := types.MessageID(messageID)
 	senderJID := c.Store.ID.ToNonAD()
 
-	msg := c.Client.BuildReaction(chat, senderJID, msgID, emoji)
+	msg := c.BuildReaction(chat, senderJID, msgID, emoji)
 	_, err = c.Client.SendMessage(context.Background(), chat, msg)
 	if err != nil {
 		return fmt.Errorf("failed to send reaction: %v", err)
@@ -293,7 +293,7 @@ func (c *Client) EditMessage(chatJID, messageID, newContent string) error {
 	newMsg := &waE2E.Message{
 		Conversation: proto.String(newContent),
 	}
-	msg := c.Client.BuildEdit(chat, msgID, newMsg)
+	msg := c.BuildEdit(chat, msgID, newMsg)
 	_, err = c.Client.SendMessage(context.Background(), chat, msg)
 	if err != nil {
 		return fmt.Errorf("failed to edit message: %v", err)
@@ -325,7 +325,7 @@ func (c *Client) DeleteMessage(chatJID, messageID, senderJID string) error {
 		}
 	}
 
-	msg := c.Client.BuildRevoke(chat, sender, msgID)
+	msg := c.BuildRevoke(chat, sender, msgID)
 	_, err = c.Client.SendMessage(context.Background(), chat, msg)
 	if err != nil {
 		return fmt.Errorf("failed to delete message: %v", err)
@@ -372,7 +372,7 @@ func (c *Client) MarkMessagesRead(chatJID string, messageIDs []string, senderJID
 		}
 	}
 
-	return c.Client.MarkRead(context.Background(), ids, time.Now(), chat, sender)
+	return c.MarkRead(context.Background(), ids, time.Now(), chat, sender)
 }
 
 // Phase 2: Group Management
@@ -421,7 +421,7 @@ func (c *Client) AddGroupParticipants(groupJID string, participants []string) ([
 		participantJIDs[i] = jid
 	}
 
-	return c.Client.UpdateGroupParticipants(context.Background(), group, participantJIDs, whatsmeow.ParticipantChangeAdd)
+	return c.UpdateGroupParticipants(context.Background(), group, participantJIDs, whatsmeow.ParticipantChangeAdd)
 }
 
 // RemoveGroupParticipants removes members from a group
@@ -444,7 +444,7 @@ func (c *Client) RemoveGroupParticipants(groupJID string, participants []string)
 		participantJIDs[i] = jid
 	}
 
-	return c.Client.UpdateGroupParticipants(context.Background(), group, participantJIDs, whatsmeow.ParticipantChangeRemove)
+	return c.UpdateGroupParticipants(context.Background(), group, participantJIDs, whatsmeow.ParticipantChangeRemove)
 }
 
 // PromoteGroupParticipant promotes a participant to admin
@@ -463,7 +463,7 @@ func (c *Client) PromoteGroupParticipant(groupJID string, participant string) ([
 		return nil, fmt.Errorf("invalid participant JID: %v", err)
 	}
 
-	return c.Client.UpdateGroupParticipants(context.Background(), group, []types.JID{jid}, whatsmeow.ParticipantChangePromote)
+	return c.UpdateGroupParticipants(context.Background(), group, []types.JID{jid}, whatsmeow.ParticipantChangePromote)
 }
 
 // DemoteGroupParticipant demotes an admin to regular participant
@@ -482,7 +482,7 @@ func (c *Client) DemoteGroupParticipant(groupJID string, participant string) ([]
 		return nil, fmt.Errorf("invalid participant JID: %v", err)
 	}
 
-	return c.Client.UpdateGroupParticipants(context.Background(), group, []types.JID{jid}, whatsmeow.ParticipantChangeDemote)
+	return c.UpdateGroupParticipants(context.Background(), group, []types.JID{jid}, whatsmeow.ParticipantChangeDemote)
 }
 
 // LeaveGroup leaves a WhatsApp group
@@ -547,7 +547,7 @@ func (c *Client) CreatePoll(chatJID string, question string, options []string, m
 	}
 
 	// Build poll creation message
-	pollMsg := c.Client.BuildPollCreation(question, options, selectableCount)
+	pollMsg := c.BuildPollCreation(question, options, selectableCount)
 
 	// Send the poll
 	resp, err := c.Client.SendMessage(context.Background(), chat, pollMsg)
@@ -591,9 +591,9 @@ func (c *Client) RequestChatHistory(chatJID string, oldestMsgID string, oldestMs
 	if chat.Server == "g.us" && !oldestMsgFromMe {
 		// For group chats, we'd need the sender JID
 		// This is a limitation - we might need to store sender info
-		msgInfo.MessageSource.Sender = chat // Use chat as placeholder
+		msgInfo.Sender = chat // Use chat as placeholder
 	} else {
-		msgInfo.MessageSource.Sender = c.Store.ID.ToNonAD()
+		msgInfo.Sender = c.Store.ID.ToNonAD()
 	}
 
 	// Build the history sync request
@@ -602,7 +602,7 @@ func (c *Client) RequestChatHistory(chatJID string, oldestMsgID string, oldestMs
 		count = 50
 	}
 
-	msg := c.Client.BuildHistorySyncRequest(msgInfo, count)
+	msg := c.BuildHistorySyncRequest(msgInfo, count)
 
 	// Send the request to the phone
 	// The response comes as events.HistorySync with type ON_DEMAND

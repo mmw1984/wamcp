@@ -47,7 +47,7 @@ func (store *MessageStore) GetMessages(chatJID string, limit int) ([]types.Messa
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var messages []types.Message
 	for rows.Next() {
@@ -90,7 +90,7 @@ func (store *MessageStore) GetChats() (map[string]time.Time, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	chats := make(map[string]time.Time)
 	for rows.Next() {

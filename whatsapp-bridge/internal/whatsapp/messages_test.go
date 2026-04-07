@@ -31,7 +31,7 @@ func TestValidateMediaPath(t *testing.T) {
 	}
 
 	// Ensure DISABLE_PATH_CHECK is not set for these tests
-	os.Unsetenv("DISABLE_PATH_CHECK")
+	_ = os.Unsetenv("DISABLE_PATH_CHECK")
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -57,10 +57,10 @@ func TestValidateMediaPath(t *testing.T) {
 func TestValidateMediaPath_DisableCheck(t *testing.T) {
 	// Save and restore env var
 	original := os.Getenv("DISABLE_PATH_CHECK")
-	defer os.Setenv("DISABLE_PATH_CHECK", original)
+	defer func() { _ = os.Setenv("DISABLE_PATH_CHECK", original) }()
 
 	// Enable path check bypass
-	os.Setenv("DISABLE_PATH_CHECK", "true")
+	_ = os.Setenv("DISABLE_PATH_CHECK", "true")
 
 	// Should now allow paths outside allowed directories
 	// Note: Path traversal attempts still blocked
@@ -73,10 +73,10 @@ func TestValidateMediaPath_DisableCheck(t *testing.T) {
 func TestValidateMediaPath_TraversalAlwaysBlocked(t *testing.T) {
 	// Save and restore env var
 	original := os.Getenv("DISABLE_PATH_CHECK")
-	defer os.Setenv("DISABLE_PATH_CHECK", original)
+	defer func() { _ = os.Setenv("DISABLE_PATH_CHECK", original) }()
 
 	// Even with DISABLE_PATH_CHECK=true, path traversal should be blocked
-	os.Setenv("DISABLE_PATH_CHECK", "true")
+	_ = os.Setenv("DISABLE_PATH_CHECK", "true")
 
 	err := validateMediaPath("/app/media/../../../etc/passwd")
 	if err == nil {
