@@ -31,8 +31,8 @@ wamcp installer
 Options:
   --ref <ref>         Git ref (tag/branch/commit). Default: ${REF}
   --repo <url>        Git repo URL. Default: ${REPO_URL}
-  --uninstall         Remove ~/.local/bin/wamcp and (optionally) sources
-  --purge             With --uninstall, also remove ${SRC_BASE_DIR}
+  --uninstall         Remove ~/.local/bin/wamcp, ~/.wamcp, and source checkout (${SRC_BASE_DIR})
+  --purge             Keep compatibility flag (currently same as --uninstall)
 EOF
 }
 
@@ -68,8 +68,11 @@ ensure_path_hint() {
 uninstall() {
   local purge="${1:-false}"
   rm -f "${INSTALL_BIN_DIR}/wamcp" || true
+  rm -rf "${HOME}/.wamcp" || true
+  rm -rf "${SRC_BASE_DIR}" || true
   if [[ "${purge}" == "true" ]]; then
-    rm -rf "${SRC_BASE_DIR}" || true
+    rm -rf "${HOME}/.wamcp-src/current" || true
+    rm -rf "${HOME}/.wamcp-src" || true
   fi
   print "Uninstalled wamcp."
 }

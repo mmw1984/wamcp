@@ -690,12 +690,13 @@ doctor_cmd() {
 
 self_uninstall_cmd() {
   local bin="${WAMCP_BIN:-${HOME}/.local/bin/wamcp}"
+  local state_dir="${STATE_DIR}"
   print_warn "This will remove: ${bin}"
   rm -f "${bin}" || true
   print_info "Removed global wamcp shim (if present)."
-  print_info "Optional cleanup:"
-  print_info "  rm -rf \"${HOME}/.wamcp-src\""
-  print_info "  rm -rf \"${STATE_DIR}\""
+  stop_cmd
+  rm -rf "${state_dir}" || true
+  print_info "Removed runtime state: ${state_dir} (if present)."
 }
 
 mcp_config_cmd() {

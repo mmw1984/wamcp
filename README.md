@@ -87,8 +87,6 @@ wamcp mcp-config
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mmw1984/wamcp/main/install.sh | bash -s -- --uninstall
-rm -rf ~/.wamcp-src   # optional: remove downloaded source
-rm -rf ~/.wamcp       # optional: remove runtime state
 ```
 
 ### 廣東話 Quickstart
